@@ -16,13 +16,13 @@ pub fn generate_code(account: &Account) -> Result<String, TotpError> {
     let secret_bytes = secret.to_bytes()
         .map_err(|e| TotpError::InvalidSecret(e.to_string()))?;
 
-    let totp = TOTP::new(
+    let totp = TOTP::new_unchecked(
         Algorithm::SHA1,
         6,
         1,
         30,
         secret_bytes,
-    ).map_err(|e| TotpError::InvalidSecret(e.to_string()))?;
+    );
     
     totp.generate_current().map_err(|e| TotpError::Generation(e.to_string()))
 }
@@ -33,7 +33,7 @@ mod tests {
 
     #[test]
     fn test_valid_secret() {
-        let account = Account::new("test".to_string(), "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP".to_string());
+        let account = Account::new("test".to_string(), "JBSWY3DPEHPK3PXP".to_string());
         assert!(generate_code(&account).is_ok());
     }
 

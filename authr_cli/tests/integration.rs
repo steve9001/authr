@@ -30,7 +30,7 @@ fn test_add_and_list() {
     authr_cmd(&temp)
         .arg("add")
         .arg("testuser")
-        .arg("JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP")
+        .arg("JBSWY3DPEHPK3PXP")
         .assert()
         .success()
         .stdout(predicates::str::contains("Account 'testuser' added"));
@@ -47,7 +47,7 @@ fn test_remove() {
     let temp = setup();
     // Add first
     authr_cmd(&temp)
-        .args(&["add", "toremove", "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"])
+        .args(&["add", "toremove", "JBSWY3DPEHPK3PXP"])
         .assert()
         .success();
 
@@ -70,7 +70,7 @@ fn test_remove() {
 fn test_show() {
     let temp = setup();
     authr_cmd(&temp)
-        .args(&["add", "myservice", "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP"])
+        .args(&["add", "myservice", "JBSWY3DPEHPK3PXP"])
         .assert()
         .success();
 
