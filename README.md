@@ -22,8 +22,8 @@ authr supports the following commands:
   `authr list`
 
 - Add a new account:
-  `authr add <name> <secret>`
-  Example: `authr add MyService MakeSureSecretIsLongEnough`
+  `authr add <name>`
+  Example: `authr add MyService` (You will be prompted to enter the secret)
 
 - Remove an account:
   `authr remove <name>`

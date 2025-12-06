@@ -8,7 +8,7 @@ fn setup() -> TempDir {
 
 // Helper to configure command with temp env
 fn authr_cmd(temp_dir: &TempDir) -> Command {
-    let mut cmd = Command::cargo_bin("authr_cli").unwrap();
+    let mut cmd = Command::cargo_bin("authr").unwrap();
     cmd.env("HOME", temp_dir.path())
        .env("XDG_CONFIG_HOME", temp_dir.path().join(".config"));
     cmd
@@ -30,7 +30,7 @@ fn test_add_and_list() {
     authr_cmd(&temp)
         .arg("add")
         .arg("testuser")
-        .arg("JBSWY3DPEHPK3PXP")
+        .write_stdin("JBSWY3DPEHPK3PXP\n")
         .assert()
         .success()
         .stdout(predicates::str::contains("Account 'testuser' added"));
@@ -47,7 +47,8 @@ fn test_remove() {
     let temp = setup();
     // Add first
     authr_cmd(&temp)
-        .args(&["add", "toremove", "JBSWY3DPEHPK3PXP"])
+        .args(&["add", "toremove"])
+        .write_stdin("JBSWY3DPEHPK3PXP\n")
         .assert()
         .success();
 
@@ -70,7 +71,8 @@ fn test_remove() {
 fn test_show() {
     let temp = setup();
     authr_cmd(&temp)
-        .args(&["add", "myservice", "JBSWY3DPEHPK3PXP"])
+        .args(&["add", "myservice"])
+        .write_stdin("JBSWY3DPEHPK3PXP\n")
         .assert()
         .success();
 

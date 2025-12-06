@@ -20,8 +20,6 @@ enum Commands {
     Add {
         /// Account name
         name: String,
-        /// Secret key (base32)
-        secret: String,
     },
     /// Remove an account
     Remove {
@@ -43,7 +41,7 @@ fn main() -> Result<()> {
 
     match cli.command {
         Some(Commands::List) => commands::list()?,
-        Some(Commands::Add { name, secret }) => commands::add(name, secret)?,
+        Some(Commands::Add { name }) => commands::add(name)?,
         Some(Commands::Remove { name }) => commands::remove(&name)?,
         Some(Commands::Show { name, seed }) => commands::show(&name, seed)?,
         None => tui_interface::run()?,

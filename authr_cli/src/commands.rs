@@ -17,7 +17,17 @@ pub fn list() -> Result<()> {
     Ok(())
 }
 
-pub fn add(name: String, secret: String) -> Result<()> {
+use std::io::{self, IsTerminal};
+
+pub fn add(name: String) -> Result<()> {
+    let secret = if io::stdin().is_terminal() {
+        rpassword::prompt_password("Enter secret: ")
+            .context("Failed to read secret")?
+    } else {
+        let mut input = String::new();
+        io::stdin().read_line(&mut input).context("Failed to read secret from stdin")?;
+        input.trim().to_string()
+    };
     // Validate secret by trying to generate a code (or just decoding)
     // totp-rs validation happens in generate or constructor
     // Simple validation:
