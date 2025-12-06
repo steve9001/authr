@@ -12,7 +12,18 @@ impl Account {
         Self {
             name,
             issuer: None,
-            secret,
+            secret: secret.to_uppercase(),
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_secret_normalization() {
+        let account = Account::new("test".to_string(), "jbswy3dpehpk3pxp".to_string());
+        assert_eq!(account.secret, "JBSWY3DPEHPK3PXP");
     }
 }
