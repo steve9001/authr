@@ -11,7 +11,8 @@ use std::time::{SystemTime, UNIX_EPOCH, Duration};
 pub fn run() -> Result<()> {
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()
-            .with_inner_size([400.0, 600.0]),
+            .with_inner_size([400.0, 600.0])
+            .with_icon(load_icon()),
         ..Default::default()
     };
     eframe::run_native(
@@ -132,6 +133,25 @@ impl eframe::App for AuthrApp {
                 }
             });
         });
+    }
+}
+
+#[cfg(feature = "gui")]
+fn load_icon() -> egui::IconData {
+    let (icon_rgba, icon_width, icon_height) = {
+        let icon = include_bytes!("../assets/icon.png");
+        let image = image::load_from_memory(icon)
+            .expect("Failed to load icon")
+            .into_rgba8();
+        let (width, height) = image.dimensions();
+        let rgba = image.into_raw();
+        (rgba, width, height)
+    };
+
+    egui::IconData {
+        rgba: icon_rgba,
+        width: icon_width,
+        height: icon_height,
     }
 }
 
