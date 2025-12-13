@@ -3,6 +3,7 @@ use anyhow::Result;
 
 mod commands;
 mod tui_interface;
+mod gui_interface;
 
 #[derive(Parser)]
 #[command(name = "authr")]
@@ -44,7 +45,28 @@ fn main() -> Result<()> {
         Some(Commands::Add { name }) => commands::add(name)?,
         Some(Commands::Remove { name }) => commands::remove(&name)?,
         Some(Commands::Show { name, seed }) => commands::show(&name, seed)?,
-        None => tui_interface::run()?,
+        None => {
+            #[cfg(feature = "gui")]
+            {
+                // Prefer GUI if enabled
+                gui_interface::run()?;
+                return Ok(());
+            }
+
+            #[cfg(all(feature = "tui", not(feature = "gui")))]
+            {
+                tui_interface::run()?;
+                return Ok(());
+            }
+
+             #[cfg(not(any(feature = "tui", feature = "gui")))]
+             {
+                 use clap::CommandFactory;
+                 Cli::command().print_help()?;
+                 println!("\nNo interface features enabled. Use --help to see commands.");
+                 return Ok(());
+             }
+         },
     }
 
     Ok(())

@@ -1,9 +1,12 @@
+#[cfg(feature = "tui")]
 use anyhow::Result;
+#[cfg(feature = "tui")]
 use crossterm::{
     event::{self, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
+#[cfg(feature = "tui")]
 use ratatui::{
     backend::{Backend, CrosstermBackend},
     layout::{Constraint, Direction, Layout},
@@ -12,16 +15,22 @@ use ratatui::{
     widgets::{Block, Borders, List, ListItem, Paragraph},
     Terminal,
 };
+#[cfg(feature = "tui")]
 use std::{io, time::{Duration, SystemTime, UNIX_EPOCH}};
+#[cfg(feature = "tui")]
 use authr_core::model::Account;
+#[cfg(feature = "tui")]
 use authr_core::storage::load_accounts;
+#[cfg(feature = "tui")]
 use authr_core::totp;
 
+#[cfg(feature = "tui")]
 struct App {
     accounts: Vec<Account>,
     filter: String,
 }
 
+#[cfg(feature = "tui")]
 impl App {
     fn new() -> Result<Self> {
         let accounts = load_accounts()?;
@@ -43,6 +52,7 @@ impl App {
     }
 }
 
+#[cfg(feature = "tui")]
 pub fn run() -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -73,6 +83,7 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
+#[cfg(feature = "tui")]
 fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<()> {
     loop {
         terminal.draw(|f| ui(f, app))?;
@@ -92,6 +103,7 @@ fn run_app<B: Backend>(terminal: &mut Terminal<B>, app: &mut App) -> io::Result<
     }
 }
 
+#[cfg(feature = "tui")]
 fn ui(f: &mut ratatui::Frame, app: &mut App) {
     let chunks = Layout::default()
         .direction(Direction::Vertical)
@@ -135,4 +147,10 @@ fn ui(f: &mut ratatui::Frame, app: &mut App) {
         .style(Style::default().fg(Color::White))
         .block(Block::default().borders(Borders::ALL).title("Search (ESC to quit)"));
     f.render_widget(paragraph, chunks[1]);
+}
+
+#[cfg(not(feature = "tui"))]
+#[allow(dead_code)]
+pub fn run() -> anyhow::Result<()> {
+    anyhow::bail!("TUI feature not enabled");
 }

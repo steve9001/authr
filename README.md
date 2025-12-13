@@ -12,6 +12,11 @@ cd authr
 cargo install --path ./authr_cli
 ```
 
+To install with the experimental GUI:
+```bash
+cargo install --path ./authr_cli --features gui --no-default-features
+```
+
 ## Usage
 
 ### Command Line Interface
