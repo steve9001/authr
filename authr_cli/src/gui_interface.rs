@@ -58,6 +58,9 @@ impl Default for AuthrApp {
 #[cfg(feature = "gui")]
 impl eframe::App for AuthrApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Enforce dark mode
+        ctx.set_visuals(egui::Visuals::dark());
+
         // Redraw loop
         ctx.request_repaint_after(Duration::from_millis(100));
 
@@ -67,39 +70,47 @@ impl eframe::App for AuthrApp {
         
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             ui.vertical_centered(|ui| {
-                ui.add_space(10.0);
+                ui.add_space(20.0);
                 
                 // Prominent Timer
                 let timer_color = if remaining < 5 {
-                    egui::Color32::from_rgb(255, 100, 100) // Reddish
+                    egui::Color32::from_rgb(255, 80, 80) // Brighter Red
                 } else {
-                    egui::Color32::from_rgb(100, 255, 100) // Greenish
+                    egui::Color32::from_rgb(80, 255, 80) // Brighter Green
                 };
                 
                 ui.label(
                     egui::RichText::new(format!("{}", remaining))
-                        .size(48.0)
+                        .size(64.0)
                         .strong()
                         .color(timer_color)
                 );
                 
-                ui.add_space(10.0);
+                ui.add_space(15.0);
                 ui.separator();
-                ui.add_space(5.0);
+                ui.add_space(10.0);
 
                 // Search Bar
                 ui.horizontal(|ui| {
-                    ui.label(egui::RichText::new("🔍").size(16.0));
-                    ui.text_edit_singleline(&mut self.filter);
+                    ui.add_space(10.0);
+                    ui.label(egui::RichText::new("🔍").size(18.0));
+                    ui.add(
+                        egui::TextEdit::singleline(&mut self.filter)
+                            .desired_width(f32::INFINITY)
+                            .hint_text("Search accounts...")
+                    );
+                    ui.add_space(10.0);
                 });
                 
-                ui.add_space(5.0);
+                ui.add_space(10.0);
             });
         });
 
         egui::CentralPanel::default().show(ctx, |ui| {
             if let Some(err) = &self.error {
-                ui.label(egui::RichText::new(format!("Error loading accounts: {}", err)).color(egui::Color32::RED));
+                ui.centered_and_justified(|ui| {
+                    ui.label(egui::RichText::new(format!("Error loading accounts: {}", err)).color(egui::Color32::RED));
+                });
                 return;
             }
 
@@ -112,25 +123,34 @@ impl eframe::App for AuthrApp {
             };
 
             egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.add_space(10.0);
                 for account in filtered {
-                    ui.group(|ui| {
-                        ui.horizontal(|ui| {
-                            // Account Name
-                            ui.label(egui::RichText::new(&account.name).size(16.0).strong());
-                            
-                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                // Generate code
-                                let code = totp::generate_code(account).unwrap_or_else(|_| "ERROR".to_string());
+                    egui::Frame::group(ui.style())
+                        .rounding(10.0)
+                        .inner_margin(10.0)
+                        .show(ui, |ui| {
+                            ui.horizontal(|ui| {
+                                // Account Name
+                                ui.label(egui::RichText::new(&account.name).size(18.0).strong());
                                 
-                                // Copy Button/Label
-                                if ui.button(egui::RichText::new(&code).size(18.0).monospace()).clicked() {
-                                    ui.output_mut(|o| o.copied_text = code.clone());
-                                }
+                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                    // Generate code
+                                    let code = totp::generate_code(account).unwrap_or_else(|_| "ERROR".to_string());
+                                    
+                                    // Copy Button/Label
+                                    let btn = egui::Button::new(
+                                        egui::RichText::new(&code).size(22.0).monospace().color(egui::Color32::LIGHT_BLUE)
+                                    ).frame(false);
+                                    
+                                    if ui.add(btn).clicked() {
+                                        ui.output_mut(|o| o.copied_text = code.clone());
+                                    }
+                                });
                             });
                         });
-                    });
-                    ui.add_space(2.0);
+                    ui.add_space(5.0);
                 }
+                ui.add_space(10.0);
             });
         });
     }
