@@ -1,6 +1,6 @@
 use anyhow::Result;
 use crossterm::{
-    event::{self, DisableMouseCapture, EnableMouseCapture, Event, KeyCode, KeyEventKind},
+    event::{self, Event, KeyCode, KeyEventKind},
     execute,
     terminal::{disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen},
 };
@@ -46,7 +46,7 @@ impl App {
 pub fn run() -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
-    execute!(stdout, EnterAlternateScreen, EnableMouseCapture)?;
+    execute!(stdout, EnterAlternateScreen)?;
     let backend = CrosstermBackend::new(stdout);
     let mut terminal = Terminal::new(backend)?;
 
@@ -55,7 +55,7 @@ pub fn run() -> Result<()> {
         Ok(app) => app,
         Err(e) => {
              disable_raw_mode()?;
-             execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
+             execute!(io::stdout(), LeaveAlternateScreen)?;
              return Err(e);
         }
     };
@@ -63,7 +63,7 @@ pub fn run() -> Result<()> {
     let res = run_app(&mut terminal, &mut app);
 
     disable_raw_mode()?;
-    execute!(io::stdout(), LeaveAlternateScreen, DisableMouseCapture)?;
+    execute!(io::stdout(), LeaveAlternateScreen)?;
     terminal.show_cursor()?;
 
     if let Err(err) = res {
