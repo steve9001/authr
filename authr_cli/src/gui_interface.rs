@@ -2,37 +2,135 @@
 use eframe::egui;
 #[cfg(feature = "gui")]
 use anyhow::Result;
+#[cfg(feature = "gui")]
+use authr_core::{model::Account, storage::load_accounts, totp};
+#[cfg(feature = "gui")]
+use std::time::{SystemTime, UNIX_EPOCH, Duration};
 
 #[cfg(feature = "gui")]
 pub fn run() -> Result<()> {
-    // Basic eframe setup
-    let options = eframe::NativeOptions::default();
+    let options = eframe::NativeOptions {
+        viewport: egui::ViewportBuilder::default()
+            .with_inner_size([400.0, 600.0]),
+        ..Default::default()
+    };
     eframe::run_native(
         "Authr",
         options,
-        Box::new(|_cc| Ok(Box::new(AuthrApp::default()))),
+        Box::new(|_cc| Ok(Box::new(AuthrApp::new()))),
     ).map_err(|e| anyhow::anyhow!("Eframe error: {}", e))?;
     Ok(())
 }
 
 #[cfg(feature = "gui")]
 struct AuthrApp {
-    // State will go here
+    accounts: Vec<Account>,
+    filter: String,
+    error: Option<String>,
+}
+
+#[cfg(feature = "gui")]
+impl AuthrApp {
+    fn new() -> Self {
+        match load_accounts() {
+            Ok(accounts) => Self {
+                accounts,
+                filter: String::new(),
+                error: None,
+            },
+            Err(e) => Self {
+                accounts: vec![],
+                filter: String::new(),
+                error: Some(e.to_string()),
+            }
+        }
+    }
 }
 
 #[cfg(feature = "gui")]
 impl Default for AuthrApp {
     fn default() -> Self {
-        Self {}
+        Self::new()
     }
 }
 
 #[cfg(feature = "gui")]
 impl eframe::App for AuthrApp {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        // Redraw loop
+        ctx.request_repaint_after(Duration::from_millis(100));
+
+        // Timer calculation
+        let now = SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_secs();
+        let remaining = 30 - (now % 30);
+        
+        egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.add_space(10.0);
+                
+                // Prominent Timer
+                let timer_color = if remaining < 5 {
+                    egui::Color32::from_rgb(255, 100, 100) // Reddish
+                } else {
+                    egui::Color32::from_rgb(100, 255, 100) // Greenish
+                };
+                
+                ui.label(
+                    egui::RichText::new(format!("{}", remaining))
+                        .size(48.0)
+                        .strong()
+                        .color(timer_color)
+                );
+                
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(5.0);
+
+                // Search Bar
+                ui.horizontal(|ui| {
+                    ui.label(egui::RichText::new("🔍").size(16.0));
+                    ui.text_edit_singleline(&mut self.filter);
+                });
+                
+                ui.add_space(5.0);
+            });
+        });
+
         egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Authr (GUI Mode)");
-            ui.label("Not implemented yet.");
+            if let Some(err) = &self.error {
+                ui.label(egui::RichText::new(format!("Error loading accounts: {}", err)).color(egui::Color32::RED));
+                return;
+            }
+
+            let filtered: Vec<&Account> = if self.filter.is_empty() {
+                self.accounts.iter().collect()
+            } else {
+                self.accounts.iter()
+                    .filter(|a| a.name.to_lowercase().contains(&self.filter.to_lowercase()))
+                    .collect()
+            };
+
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for account in filtered {
+                    ui.group(|ui| {
+                        ui.horizontal(|ui| {
+                            // Account Name
+                            ui.label(egui::RichText::new(&account.name).size(16.0).strong());
+                            
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                // Generate code
+                                let code = totp::generate_code(account).unwrap_or_else(|_| "ERROR".to_string());
+                                
+                                // Copy Button/Label
+                                if ui.button(egui::RichText::new(&code).size(18.0).monospace()).clicked() {
+                                    ui.output_mut(|o| o.copied_text = code.clone());
+                                }
+                            });
+                        });
+                    });
+                    ui.add_space(2.0);
+                }
+            });
         });
     }
 }

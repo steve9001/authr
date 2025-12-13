@@ -35,6 +35,9 @@ enum Commands {
         #[arg(long)]
         seed: bool,
     },
+    /// Internal use only for launching GUI in background
+    #[command(hide = true)]
+    GuiWorker,
 }
 
 fn main() -> Result<()> {
@@ -45,11 +48,27 @@ fn main() -> Result<()> {
         Some(Commands::Add { name }) => commands::add(name)?,
         Some(Commands::Remove { name }) => commands::remove(&name)?,
         Some(Commands::Show { name, seed }) => commands::show(&name, seed)?,
+        Some(Commands::GuiWorker) => {
+            #[cfg(feature = "gui")]
+            {
+                gui_interface::run()?;
+                return Ok(());
+            }
+            #[cfg(not(feature = "gui"))]
+            {
+                anyhow::bail!("GUI feature not enabled");
+            }
+        },
         None => {
             #[cfg(feature = "gui")]
             {
-                // Prefer GUI if enabled
-                gui_interface::run()?;
+                // Prefer GUI if enabled.
+                // Spawn detached process and exit.
+                let exe = std::env::current_exe()?;
+                std::process::Command::new(exe)
+                    .arg("gui-worker")
+                    .spawn()?;
+                println!("Launched Authr GUI in background.");
                 return Ok(());
             }
 
