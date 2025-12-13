@@ -98,7 +98,7 @@ impl eframe::App for AuthrApp {
                         egui::TextEdit::singleline(&mut self.filter)
                             .desired_width(f32::INFINITY)
                             .hint_text("Search accounts...")
-                    );
+                    ).request_focus();
                     ui.add_space(10.0);
                 });
                 
