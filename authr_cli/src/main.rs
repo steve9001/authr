@@ -1,9 +1,9 @@
-use clap::{Parser, Subcommand};
 use anyhow::Result;
+use clap::{Parser, Subcommand};
 
 mod commands;
-mod tui_interface;
 mod gui_interface;
+mod tui_interface;
 
 #[derive(Parser)]
 #[command(name = "authr")]
@@ -58,17 +58,14 @@ fn main() -> Result<()> {
             {
                 anyhow::bail!("GUI feature not enabled");
             }
-        },
+        }
         None => {
             #[cfg(feature = "gui")]
             {
                 // Prefer GUI if enabled.
                 // Spawn detached process and exit.
                 let exe = std::env::current_exe()?;
-                std::process::Command::new(exe)
-                    .arg("gui-worker")
-                    .spawn()?;
-                println!("Launched Authr GUI in background.");
+                std::process::Command::new(exe).arg("gui-worker").spawn()?;
                 return Ok(());
             }
 
@@ -78,14 +75,14 @@ fn main() -> Result<()> {
                 return Ok(());
             }
 
-             #[cfg(not(any(feature = "tui", feature = "gui")))]
-             {
-                 use clap::CommandFactory;
-                 Cli::command().print_help()?;
-                 println!("\nNo interface features enabled. Use --help to see commands.");
-                 return Ok(());
-             }
-         },
+            #[cfg(not(any(feature = "tui", feature = "gui")))]
+            {
+                use clap::CommandFactory;
+                Cli::command().print_help()?;
+                println!("\nNo interface features enabled. Use --help to see commands.");
+                return Ok(());
+            }
+        }
     }
 
     Ok(())
