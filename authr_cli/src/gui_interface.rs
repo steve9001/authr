@@ -23,11 +23,13 @@ pub fn run() -> Result<()> {
     Ok(())
 }
 
+
 #[cfg(feature = "gui")]
 struct AuthrApp {
     accounts: Vec<Account>,
     filter: String,
     error: Option<String>,
+    last_copied: Option<(String, SystemTime)>,
 }
 
 #[cfg(feature = "gui")]
@@ -38,22 +40,18 @@ impl AuthrApp {
                 accounts,
                 filter: String::new(),
                 error: None,
+                last_copied: None,
             },
             Err(e) => Self {
                 accounts: vec![],
                 filter: String::new(),
                 error: Some(e.to_string()),
+                last_copied: None,
             }
         }
     }
 }
-
-#[cfg(feature = "gui")]
-impl Default for AuthrApp {
-    fn default() -> Self {
-        Self::new()
-    }
-}
+// Note: Trait impl Default calls new(), so it's fine.
 
 #[cfg(feature = "gui")]
 impl eframe::App for AuthrApp {
@@ -125,29 +123,59 @@ impl eframe::App for AuthrApp {
             egui::ScrollArea::vertical().show(ui, |ui| {
                 ui.add_space(10.0);
                 for account in filtered {
-                    egui::Frame::group(ui.style())
+                    let mut is_flashing = false;
+                    if let Some((name, time)) = &self.last_copied {
+                        if name == &account.name {
+                            if let Ok(elapsed) = time.elapsed() {
+                                if elapsed.as_millis() < 300 {
+                                    is_flashing = true;
+                                }
+                            }
+                        }
+                    }
+
+                    let bg_color = if is_flashing {
+                        egui::Color32::from_rgb(60, 65, 80) // Visual feedback color
+                    } else {
+                        ui.style().visuals.faint_bg_color
+                    };
+
+                    let frame = egui::Frame::group(ui.style())
                         .rounding(10.0)
                         .inner_margin(10.0)
-                        .show(ui, |ui| {
-                            ui.horizontal(|ui| {
-                                // Account Name
-                                ui.label(egui::RichText::new(&account.name).size(18.0).strong());
+                        .fill(bg_color); // Use explicit fill
+
+                    let response = frame.show(ui, |ui| {
+                        ui.set_width(ui.available_width()); // Ensure frame content fills width for clicks
+                        ui.horizontal(|ui| {
+                            // Account Name
+                            ui.label(egui::RichText::new(&account.name).size(18.0).strong());
+                            
+                            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                                // Generate code
+                                let code = totp::generate_code(account).unwrap_or_else(|_| "ERROR".to_string());
                                 
-                                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                                    // Generate code
-                                    let code = totp::generate_code(account).unwrap_or_else(|_| "ERROR".to_string());
-                                    
-                                    // Copy Button/Label
-                                    let btn = egui::Button::new(
-                                        egui::RichText::new(&code).size(22.0).monospace().color(egui::Color32::LIGHT_BLUE)
-                                    ).frame(false);
-                                    
-                                    if ui.add(btn).clicked() {
-                                        ui.output_mut(|o| o.copied_text = code.clone());
-                                    }
-                                });
+                                // Display Code (as simple label now)
+                                ui.label(egui::RichText::new(&code).size(22.0).monospace().color(egui::Color32::LIGHT_BLUE));
                             });
                         });
+                    });
+
+                    // Make the entire frame content area clickable
+                    let rect = response.response.rect.expand(2.0); // Slightly expand to cover margin edges
+                    let interact = ui.interact(rect, ui.make_persistent_id(&account.name), egui::Sense::click());
+                    
+                    if interact.clicked() {
+                        let code = totp::generate_code(account).unwrap_or_else(|_| "ERROR".to_string());
+                        ui.output_mut(|o| o.copied_text = code);
+                        self.last_copied = Some((account.name.clone(), SystemTime::now()));
+                    }
+
+                    // Enforce hand cursor on hover
+                    if interact.hovered() {
+                        ui.ctx().set_cursor_icon(egui::CursorIcon::PointingHand);
+                    }
+
                     ui.add_space(5.0);
                 }
                 ui.add_space(10.0);
