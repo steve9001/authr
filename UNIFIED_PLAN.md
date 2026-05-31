@@ -63,6 +63,9 @@ encryption, backup) that we ship on macOS.
 | D8 | Distribution channels | **Both**: (a) Developer ID + notarized **DMG** for GitHub, and (b) **App Store** build. These diverge (different cert + App Sandbox) — see §7. | Per direction ("GitHub and/or the App Store"). |
 | D9 | Visual style | Direction E is **layout-only**; pick a baseline now: **dark theme, compact, monospace codes**, carry the current egui popover's feel. | direction-e README defers styling to the implementer; we lock a baseline so screens land consistently. |
 | D10 | The CLI | **Removed entirely.** No `authr` command-line binary; the `authr_cli` crate is deleted. The only artifact is the `.app` bundle (DMG / App Store). | Encryption + session unlock + backup belong to the GUI; a CLI would have to re-implement the unlock UX for no benefit, and the bundle already installs to `/Applications`. |
+| D11 | Backup *import* / multi-device | **One-tap additive merge, keyed on the secret. No network or cloud — the `.authr` file is the only transport.** Import *adds* what's new and *keeps* what you have; it **never deletes and never overwrites**. Identity is the immutable TOTP **secret** (not the editable name), so import is rename-safe and idempotent. Two devices that import each other's files converge to the **union** of their accounts. Merge runs in Rust core, so no secret crosses the bridge (D4). The `.authr` format is **unchanged** — this is additive-union, *not* delete-aware sync. | Resolves the §7 "backup import" open item. A snapshot file has no timestamps/tombstones, so deletions and last-writer-wins can't be resolved safely; additive union is the correct, honest primitive over a file. (LWW + tombstones — adding `modified_at` + soft-deletes to the format — was the considered alternative; **not** chosen, to keep the format stable.) |
+
+**D11 one-tap merge rules** (keyed on secret): secret already present locally → **skip** (idempotent; local name/label wins); secret absent + name free → **add as-is**; secret absent + name collides with a *different* secret → **add under a de-duplicated label** (`Name (imported)`). Never deletes; never overwrites. A summary toast reports counts (added / skipped / relabeled). **Trap to surface in-UI:** with no tombstones, importing a snapshot can resurrect an account you deliberately deleted on this device (it's still in the other file) — additive merge can't distinguish "deleted here" from "new there."
 
 ---
 
@@ -135,6 +138,7 @@ Narrow, explicitly registered (migration §5.1). Grouped by the phase that intro
 | `set_password(new)` / `change_password(old,new)` | `Result<(),String>` | 4 | encrypts the store |
 | `unlock(password)` | `Result<(),String>` | 4 | decrypts in-session (D7) |
 | `export_backup(dest_path, password: Option<String>)` | `Result<(),String>` | 5 | frontend `dialog` plugin picks path; `Some(pw)` → encrypt the backup with **that** password (D6); `None` → plaintext JSON (UI requires an explicit confirmation first) |
+| `import_backup(src_path, password: Option<String>)` | `Result<ImportSummary,String>` | 5 | one-tap additive merge keyed on the secret (D11); `Some(pw)` decrypts an encrypted `.authr`; **never deletes/overwrites**; returns counts (`{ added, skipped, relabeled }`) for the toast — **no secret crosses the bridge** |
 
 Copying a code: the code is already in the webview, so the **frontend clipboard-write**
 plugin handles E1/E2 tap-to-copy. A Rust `copy_code` is optional and only worth it if we add
@@ -177,6 +181,7 @@ the checklist that says "the plan covers all the new features and appearance."
 | E4 set/change password; unrecoverable warning | direction-e | **4** |
 | Encrypted store at rest; unlock-on-open gate; silent re-encrypt on write (D7) | direction-e | **4** |
 | E6 backup → single `.authr` file with its **own** password+confirm (or confirmed plaintext), via save/share (D6) | direction-e + D6 | **5** |
+| Import / restore → one-tap additive merge from a `.authr` file, keyed on secret, never deletes (D11) | this plan / D11 | **5** |
 | Visual design pass (dark, compact, final look/feel) | D9 | **6** |
 | Developer ID signing + hardened runtime + notarization + DMG | migration §4 P3, guide §2.3 | **7** |
 | App Store build (App Sandbox + Apple Distribution) | D8 | **7** |
@@ -245,8 +250,9 @@ unrecoverable warning; `/unlock` view shown when the app opens while encrypted+l
 adding an account while unlocked silently re-encrypts; wrong password fails cleanly;
 change-password re-encrypts under the new passphrase.
 
-### Phase 5 — backup / export (E6)
-Command: `export_backup(dest_path, password)` (D6). The backup gets its **own** password,
+### Phase 5 — backup / export + import (E6 + import)
+Commands: `export_backup(dest_path, password)` (D6) and `import_backup(src_path, password)` (D11).
+The backup gets its **own** password,
 independent of the live store: E6 presents a **password + confirm** pair; the frontend
 `dialog` plugin picks the destination; Rust writes the `.authr` file encrypted (via the same
 `age` passphrase path as the vault) with the supplied password. If the user leaves the password
@@ -255,9 +261,21 @@ plaintext JSON. Svelte: E6 as a bottom sheet over a dimmed Settings (plain dialo
 file card showing `authr-vault.authr`, the password+confirm fields with the encrypted/plaintext
 state, explanation, Save/share + Cancel. Add the `fs`/`dialog` capability scoped to
 user-selected paths.
+
+**Import (D11):** an "Import accounts" row in E3's Backup section opens the `dialog` plugin to
+pick a `.authr` file; if it's encrypted, prompt for *that file's* password (independent of the
+live store). The merge runs in Rust core — additive, keyed on the secret, idempotent, **never
+deletes or overwrites** (rules in D11). `import_backup` returns `{ added, skipped, relabeled }`;
+the UI shows a one-tap result toast (e.g. *"Imported 9 new accounts"*) — no review screen, no
+secret returned. If the store is encrypted+unlocked, the merged result is re-encrypted on save
+via the in-memory passphrase (D7). One honest caveat to word into the Backup section: import is
+**additive union, not delete-aware sync**, so a re-imported snapshot can resurrect a locally
+deleted account.
+
 **Exit:** export with a password produces a single file unreadable without that password and
-round-trips back in (manually, for now — import is not a Direction E screen); export without a
-password requires the plaintext confirmation and yields readable JSON.
+**round-trips back in via `import_backup`**; export without a password requires the plaintext
+confirmation and yields readable JSON; importing a file whose accounts already exist locally is a
+no-op (idempotent), and importing new accounts merges them without touching existing ones.
 
 ### Phase 6 — visual design & hardening pass
 Apply the D9 baseline across all six screens: dark theme, compact spacing, monospace codes,
@@ -326,8 +344,11 @@ Carries migration §5, amended for Direction E:
   scripted flow avoids a painful retrofit.
 - **Tray template glyph** — the current full-color `icon.png` reads poorly in the menu bar;
   need a clean monochrome glyph (Phase 6).
-- **Backup import** — Direction E specs *export* (E6) but no import screen. Restoring a
-  `.authr` file is therefore a manual/CLI step for now; flag if a UI import is wanted later.
+- **Backup import** — *resolved (D11).* Direction E speced only *export*; we add a one-tap
+  additive `import_backup` in Phase 5 (merge keyed on the secret, never deletes). Remaining
+  watch-item: it's additive *union*, not delete-aware sync — re-importing an old snapshot can
+  resurrect a deleted account. If true sync is ever wanted, that's the LWW + tombstones format
+  upgrade rejected in D11, and it changes the `.authr` format.
 
 ---
 
@@ -340,7 +361,8 @@ Carries migration §5, amended for Direction E:
 2. Tray lifecycle + E1/E2 (countdown, search+gear, always-visible codes, tap-to-copy).
 3. Settings hub + management: E3, E5, inline rename, delete-confirm (no secret shown).
 4. Encryption: E4 + unlock gate + encrypted store; silent re-encrypt on write.
-5. Backup: E6 + `.authr` export with its own password (or confirmed plaintext).
+5. Backup: E6 + `.authr` export with its own password (or confirmed plaintext); one-tap additive
+   import/merge keyed on the secret (D11).
 6. Visual design & hardening pass across all six screens; finalize icons.
 7. Signing/notarization → DMG (GitHub) **and** App Store build.
 8. README rewrite.
