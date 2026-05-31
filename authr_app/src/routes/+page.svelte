@@ -1,156 +1,287 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { writeText } from "@tauri-apps/plugin-clipboard-manager";
+  import { getCurrentWindow } from "@tauri-apps/api/window";
+  import { goto } from "$app/navigation";
 
-  let name = $state("");
-  let greetMsg = $state("");
+  type CodeView = {
+    name: string;
+    issuer: string | null;
+    code: string;
+    period_seconds: number;
+    valid_until_unix: number;
+  };
 
-  async function greet(event: Event) {
-    event.preventDefault();
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    greetMsg = await invoke("greet", { name });
+  let codes = $state<CodeView[]>([]);
+  let filter = $state("");
+  let nowMs = $state(Date.now());
+  let copiedName = $state<string | null>(null);
+  let searchEl: HTMLInputElement | undefined;
+  let copyTimer: ReturnType<typeof setTimeout> | undefined;
+
+  async function refresh() {
+    try {
+      codes = await invoke<CodeView[]>("get_codes");
+    } catch (e) {
+      console.error("get_codes failed", e);
+      codes = [];
+    }
   }
+
+  // Substring filter on name (+issuer), case-insensitive — immediate, no debounce.
+  const filtered = $derived.by(() => {
+    const q = filter.trim().toLowerCase();
+    if (!q) return codes;
+    return codes.filter(
+      (c) =>
+        c.name.toLowerCase().includes(q) ||
+        (c.issuer ?? "").toLowerCase().includes(q),
+    );
+  });
+
+  // Single global countdown — every code shares the same 30s boundary, so the first
+  // code's validity drives the whole bar (UNIFIED_PLAN E1: one global timer).
+  const periodSeconds = $derived(codes[0]?.period_seconds ?? 30);
+  const validUntil = $derived(codes[0]?.valid_until_unix ?? 0);
+  const remaining = $derived(Math.max(0, validUntil - nowMs / 1000));
+  const fraction = $derived(
+    periodSeconds > 0 ? Math.min(1, remaining / periodSeconds) : 0,
+  );
+  const secondsLeft = $derived(Math.ceil(remaining));
+
+  function grouped(code: string): string {
+    return code.length === 6 ? `${code.slice(0, 3)} ${code.slice(3)}` : code;
+  }
+
+  async function copy(c: CodeView) {
+    try {
+      await writeText(c.code);
+      copiedName = c.name;
+      clearTimeout(copyTimer);
+      copyTimer = setTimeout(() => (copiedName = null), 1000);
+    } catch (e) {
+      console.error("clipboard write failed", e);
+    }
+  }
+
+  onMount(() => {
+    refresh();
+    searchEl?.focus();
+
+    // Drive the bar and re-fetch on the real period rollover (not a client-side guess).
+    const tick = setInterval(() => {
+      nowMs = Date.now();
+      if (validUntil && nowMs / 1000 >= validUntil) {
+        refresh();
+      }
+    }, 250);
+
+    // Refresh + refocus the filter each time the popover reopens.
+    const win = getCurrentWindow();
+    const unlisten = win.onFocusChanged(({ payload: focused }) => {
+      if (focused) {
+        refresh();
+        searchEl?.focus();
+      }
+    });
+
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") win.hide();
+    };
+    window.addEventListener("keydown", onKey);
+
+    return () => {
+      clearInterval(tick);
+      unlisten.then((u) => u());
+      window.removeEventListener("keydown", onKey);
+      clearTimeout(copyTimer);
+    };
+  });
 </script>
 
-<main class="container">
-  <h1>Welcome to Tauri + Svelte</h1>
-
-  <div class="row">
-    <a href="https://vite.dev" target="_blank">
-      <img src="/vite.svg" class="logo vite" alt="Vite Logo" />
-    </a>
-    <a href="https://tauri.app" target="_blank">
-      <img src="/tauri.svg" class="logo tauri" alt="Tauri Logo" />
-    </a>
-    <a href="https://svelte.dev" target="_blank">
-      <img src="/svelte.svg" class="logo svelte-kit" alt="SvelteKit Logo" />
-    </a>
+<main>
+  <!-- Countdown bar — single global timer for when all codes roll. -->
+  <div class="countdown">
+    <div class="track">
+      <div class="fill" style="width: {fraction * 100}%"></div>
+    </div>
+    <span class="secs">{secondsLeft}s</span>
   </div>
-  <p>Click on the Tauri, Vite, and SvelteKit logos to learn more.</p>
 
-  <form class="row" onsubmit={greet}>
-    <input id="greet-input" placeholder="Enter a name..." bind:value={name} />
-    <button type="submit">Greet</button>
-  </form>
-  <p>{greetMsg}</p>
+  <!-- Search + gear bar. -->
+  <div class="searchbar">
+    <input
+      bind:this={searchEl}
+      bind:value={filter}
+      class="search"
+      type="text"
+      placeholder="Search…"
+      spellcheck="false"
+      autocomplete="off"
+      autocapitalize="off"
+    />
+    <button class="gear" title="Settings" onclick={() => goto("/settings")}>
+      ⚙
+    </button>
+  </div>
+
+  <!-- Account list — whole row is the tap-to-copy target. -->
+  <div class="list">
+    {#if filtered.length === 0}
+      <p class="empty">
+        {codes.length === 0 ? "No accounts yet" : "No matches"}
+      </p>
+    {:else}
+      {#each filtered as c (c.name)}
+        <button class="row" onclick={() => copy(c)}>
+          <span class="name">{c.name}</span>
+          {#if copiedName === c.name}
+            <span class="copied">✓ copied!</span>
+          {:else}
+            <span class="code">{grouped(c.code)}</span>
+          {/if}
+        </button>
+      {/each}
+    {/if}
+  </div>
 </main>
 
 <style>
-.logo.vite:hover {
-  filter: drop-shadow(0 0 2em #747bff);
-}
-
-.logo.svelte-kit:hover {
-  filter: drop-shadow(0 0 2em #ff3e00);
-}
-
-:root {
-  font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
-  font-size: 16px;
-  line-height: 24px;
-  font-weight: 400;
-
-  color: #0f0f0f;
-  background-color: #f6f6f6;
-
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
-}
-
-.container {
-  margin: 0;
-  padding-top: 10vh;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  text-align: center;
-}
-
-.logo {
-  height: 6em;
-  padding: 1.5em;
-  will-change: filter;
-  transition: 0.75s;
-}
-
-.logo.tauri:hover {
-  filter: drop-shadow(0 0 2em #24c8db);
-}
-
-.row {
-  display: flex;
-  justify-content: center;
-}
-
-a {
-  font-weight: 500;
-  color: #646cff;
-  text-decoration: inherit;
-}
-
-a:hover {
-  color: #535bf2;
-}
-
-h1 {
-  text-align: center;
-}
-
-input,
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  color: #0f0f0f;
-  background-color: #ffffff;
-  transition: border-color 0.25s;
-  box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
-}
-
-button {
-  cursor: pointer;
-}
-
-button:hover {
-  border-color: #396cd8;
-}
-button:active {
-  border-color: #396cd8;
-  background-color: #e8e8e8;
-}
-
-input,
-button {
-  outline: none;
-}
-
-#greet-input {
-  margin-right: 5px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    color: #f6f6f6;
-    background-color: #2f2f2f;
+  :global(html),
+  :global(body) {
+    margin: 0;
+    height: 100%;
+    background: #1b1d21;
+    color: #e6e7e9;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+    overflow: hidden;
   }
 
-  a:hover {
-    color: #24c8db;
+  main {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    padding: 8px 10px;
+    box-sizing: border-box;
+    gap: 8px;
   }
 
-  input,
-  button {
-    color: #ffffff;
-    background-color: #0f0f0f98;
+  /* Countdown bar */
+  .countdown {
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
-  button:active {
-    background-color: #0f0f0f69;
+  .track {
+    flex: 1;
+    height: 4px;
+    border-radius: 2px;
+    background: #34373d;
+    overflow: hidden;
   }
-}
+  .fill {
+    height: 100%;
+    background: #5b8cff;
+    border-radius: 2px;
+    transition: width 0.25s linear;
+  }
+  .secs {
+    font-variant-numeric: tabular-nums;
+    font-size: 11px;
+    color: #8b8f96;
+    min-width: 26px;
+    text-align: right;
+  }
 
+  /* Search + gear */
+  .searchbar {
+    display: flex;
+    gap: 6px;
+  }
+  .search {
+    flex: 1;
+    min-width: 0;
+    background: #34373d;
+    border: 1px solid transparent;
+    border-radius: 6px;
+    color: #e6e7e9;
+    padding: 6px 9px;
+    font-size: 13px;
+    outline: none;
+  }
+  .search:focus {
+    border-color: #5b8cff;
+  }
+  .search::placeholder {
+    color: #777b82;
+  }
+  .gear {
+    width: 32px;
+    background: #34373d;
+    border: none;
+    border-radius: 6px;
+    color: #c7c9cd;
+    font-size: 15px;
+    cursor: pointer;
+  }
+  .gear:hover {
+    background: #3e424a;
+  }
+
+  /* Account list */
+  .list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+  }
+  .row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 9px 10px;
+    color: inherit;
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+  }
+  .row:hover {
+    background: #2a2d33;
+  }
+  .row:active {
+    background: #34373d;
+  }
+  .name {
+    font-size: 13px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-right: 10px;
+  }
+  .code {
+    font-family: "SF Mono", ui-monospace, "Menlo", monospace;
+    font-size: 15px;
+    letter-spacing: 0.06em;
+    color: #f3f4f6;
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .copied {
+    font-size: 13px;
+    color: #4ec98a;
+    white-space: nowrap;
+  }
+  .empty {
+    color: #777b82;
+    font-size: 13px;
+    text-align: center;
+    margin-top: 24px;
+  }
 </style>

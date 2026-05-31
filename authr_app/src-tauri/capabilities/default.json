@@ -1,10 +1,14 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Capability for the main window",
+  "description": "Least-privilege surface for the main popover: hide/show/focus the window, anchor it via the positioner, and write a copied code to the clipboard (UNIFIED_PLAN §6, guide §6.4).",
   "windows": ["main"],
   "permissions": [
     "core:default",
-    "opener:default"
+    "core:window:allow-hide",
+    "core:window:allow-show",
+    "core:window:allow-set-focus",
+    "positioner:default",
+    "clipboard-manager:allow-write-text"
   ]
 }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Menu-bar agent: no Dock icon, no app menu (guide §2.1). Paired with the
+         Accessory activation policy set at runtime in lib.rs. -->
+    <key>LSUIElement</key>
+    <true/>
+</dict>
+</plist>
