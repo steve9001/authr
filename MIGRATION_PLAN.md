@@ -1,5 +1,14 @@
 # authr → System Tray App: Migration Plan
 
+> **⚠️ Superseded by [`UNIFIED_PLAN.md`](./UNIFIED_PLAN.md).** That document is the
+> authoritative build plan and **wins on every decision.** This file is retained as a
+> mechanics appendix — its phase detail, file maps, and security rationale are still
+> referenced by section (`migration §…`) from the unified plan. **Do not act on the
+> decisions below where they conflict with the unified plan.** In particular, the unified
+> plan *reverses* these: the UI is **not** read-only (it's the full manager); the **CLI is
+> removed entirely** (not kept); **Android is dropped** (no Phase 4); and **encryption +
+> backup are in scope** (not deferred). See `UNIFIED_PLAN.md §0` for the full list of changes.
+
 This plan describes how to retire authr's TUI and reshape the app into a macOS
 **menu-bar (system tray) application** built on **Tauri**, with a **Svelte** UI,
 while keeping the existing CLI and laying groundwork for an **Android** build off

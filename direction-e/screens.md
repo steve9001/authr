@@ -209,6 +209,12 @@ Reached from the "Add account" button in Settings (E3). Top to bottom:
 
 ## E6 — Back up (export file)
 
+> **Override (see `UNIFIED_PLAN.md` D6):** backup uses its **own** password (password +
+> confirm) entered at export time, independent of the live-store password — not "encrypted
+> with your password." Exporting without a password is allowed but requires an explicit
+> plaintext confirmation. Build E6 per D6, not the "🔒 encrypted with your password" wording
+> below.
+
 Reached from the "Back up accounts" row in Settings (E3). Presented as a **bottom sheet over a
 dimmed Settings screen** in the prototype; on platforms where a sheet doesn't fit, a plain
 dialog/screen with the same content is acceptable. Content, top to bottom:
@@ -247,6 +253,10 @@ dialog/screen with the same content is acceptable. Content, top to bottom:
 ---
 
 ## Delete-account confirmation (modal over E3)
+
+> **Override (see `UNIFIED_PLAN.md` D4):** the secret is **not** displayed in this modal. Drop
+> the "secret (copy before deleting)" block below; keep only the no-recovery warning. No
+> command ever returns a secret to the UI.
 
 Not a numbered E screen, but a required modal. Triggered by the trash affordance on a manage
 row in Settings (E3). The list behind it is dimmed; a centered confirmation card asks to
