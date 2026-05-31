@@ -5,6 +5,7 @@
 //! commands (`list_accounts`, `get_codes`) read through `authr_core::storage::Storage` rooted
 //! at the OS config dir. Secrets never cross the bridge (D4) — only `AccountView`/`CodeView`.
 
+use authr_core::accounts;
 use authr_core::model::{AccountView, CodeView};
 use authr_core::storage::Storage;
 use authr_core::totp;
@@ -45,6 +46,36 @@ fn get_codes(app: tauri::AppHandle) -> Result<Vec<CodeView>, String> {
         .collect()
 }
 
+/// E5 add: validate the secret + reject a duplicate name in `authr_core`, persist, and return
+/// the created account projected to an `AccountView` (no secret crosses the bridge, D4). The
+/// secret's whitespace is stripped in core ("spaces ignored").
+#[tauri::command]
+fn add_account(app: tauri::AppHandle, name: String, secret: String) -> Result<AccountView, String> {
+    let store = storage_for(&app)?;
+    let mut all = store.load().map_err(|e| e.to_string())?;
+    let added = accounts::add_account(&mut all, name, secret).map_err(|e| e.to_string())?;
+    store.save(&all).map_err(|e| e.to_string())?;
+    Ok(AccountView::from(&added))
+}
+
+/// Inline rename from an E3 manage row. Rejects a name collision / missing account in core.
+#[tauri::command]
+fn rename_account(app: tauri::AppHandle, name: String, new_name: String) -> Result<(), String> {
+    let store = storage_for(&app)?;
+    let mut all = store.load().map_err(|e| e.to_string())?;
+    accounts::rename_account(&mut all, &name, new_name).map_err(|e| e.to_string())?;
+    store.save(&all).map_err(|e| e.to_string())
+}
+
+/// Permanent delete from the E3 delete-confirm modal. No secret is returned (D4).
+#[tauri::command]
+fn delete_account(app: tauri::AppHandle, name: String) -> Result<(), String> {
+    let store = storage_for(&app)?;
+    let mut all = store.load().map_err(|e| e.to_string())?;
+    accounts::delete_account(&mut all, &name).map_err(|e| e.to_string())?;
+    store.save(&all).map_err(|e| e.to_string())
+}
+
 /// Toggle the popover: visible → hide; hidden → anchor under the tray icon, show, focus.
 fn toggle_main_window(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
@@ -64,7 +95,13 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_clipboard_manager::init())
-        .invoke_handler(tauri::generate_handler![list_accounts, get_codes])
+        .invoke_handler(tauri::generate_handler![
+            list_accounts,
+            get_codes,
+            add_account,
+            rename_account,
+            delete_account
+        ])
         .setup(|app| {
             // Hide from the Dock / app menu at runtime too (belt-and-suspenders with
             // LSUIElement in Info.plist; guide §2.1). Accessory keeps keyboard focus working.
