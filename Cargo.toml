@@ -3,5 +3,5 @@ resolver = "2"
 
 members = [
     "authr_core",
-    "authr_cli",
+    "authr_app/src-tauri",
 ]
