@@ -108,6 +108,7 @@ dependencies = [
  "tauri-build",
  "tauri-plugin-clipboard-manager",
  "tauri-plugin-positioner",
+ "tempfile",
 ]
 
 [[package]]

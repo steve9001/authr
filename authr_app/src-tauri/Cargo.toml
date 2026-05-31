@@ -25,3 +25,6 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 authr_core = { path = "../../authr_core" }
 
+[dev-dependencies]
+tempfile = "3"
+
