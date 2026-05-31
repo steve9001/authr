@@ -369,3 +369,157 @@ Carries migration §5, amended for Direction E:
 
 Phases 0–2 reproduce the migration plan's spine; 3–5 are the Direction E feature build that
 the migration plan deferred; 6–8 are polish, distribution, and docs.
+
+---
+
+## 9. Tray-free integration testing (Tiers 1 & 2)
+
+**Goal:** drive every account-management scenario (add / rename / delete / validation) and the
+command surface **without launching the menu-bar tray shell**, in tests fast enough for CI.
+This section is self-contained — an agent should be able to implement it from here without
+re-deriving the design.
+
+**Why not full E2E:** driving the *real* WKWebView end-to-end is effectively unavailable on
+macOS. The official `@crabnebula/tauri-driver` supports only Linux (`WebKitWebDriver`) and
+Windows (Edge WebDriver); Apple ships no WebDriver for an embedded WKWebView (only
+`safaridriver`, which automates Safari, not a Tauri webview). Community drivers exist
+(`tauri-plugin-webdriver`, CrabNebula's macOS driver, `tauri-webdriver`) but are young and not
+worth adopting. **Tiers 1 + 2 below cover the same scenarios without a real window.** Do not
+add a Tier 3 / WebDriver suite as part of this work.
+
+The two tiers are complementary and stack on the existing **Tier 0** (the `authr_core::accounts`
+unit tests + the `authr_core/tests/storage.rs` tempfile integration tests, already green):
+- **Tier 1 (Svelte component tests)** proves UI *behavior* against a mocked backend.
+- **Tier 2 (Rust command tests)** proves the command glue + storage round-trip against a real
+  temp-dir store, with no mocking.
+
+### 9.1 Tier 1 — Svelte component tests
+
+**Stack:** Vitest + jsdom + `@testing-library/svelte` (Svelte 5 / runes compatible) +
+`@testing-library/jest-dom`. Mounts the page components directly in a headless DOM; the tray,
+positioner, and window chrome never load.
+
+**The four seams the Phase 3 components import — mock all of them** (`vi.mock` at the top of
+each test file, or a shared setup file):
+
+| Module | Symbol used | Mock with |
+|---|---|---|
+| `@tauri-apps/api/core` | `invoke(cmd, args)` | a `vi.fn()` backed by an in-memory `Account[]`; assert call args **and** drive return/throw |
+| `@tauri-apps/api/window` | `getCurrentWindow().hide()` | stub returning `{ hide: vi.fn() }` (used by Escape handling) |
+| `@tauri-apps/plugin-clipboard-manager` | `writeText` | `vi.fn()` (only E1 needs it; harmless to stub globally) |
+| `$app/navigation` | `goto(path)` | `vi.fn()`; assert navigation targets |
+
+The mock `invoke` should switch on the command name and mutate a module-level
+`let accounts: Account[]`, mirroring the real Rust behavior closely enough to exercise the UI:
+`add_account` pushes + rejects duplicates/invalid (throw a string), `rename_account` mutates the
+name + rejects collisions, `delete_account` removes, `list_accounts` returns the current list.
+Note the **camelCase arg keys** the components send: `add_account` → `{ name, secret }`,
+`rename_account` → `{ name, newName }`, `delete_account` → `{ name }` (Tauri maps `newName` ⇄
+the Rust `new_name`; the test asserts the camelCase form the webview actually sends).
+
+**Files under test:** `authr_app/src/routes/settings/+page.svelte` and
+`authr_app/src/routes/settings/add/+page.svelte`. Put tests alongside or under
+`authr_app/src/routes/settings/` (e.g. `settings.test.ts`, `add.test.ts`) — whatever Vitest's
+`include` glob picks up.
+
+**Scenario checklist (each maps to a Direction E acceptance item):**
+1. **Add — happy path:** in the add form, type a name + a secret *with spaces*; click
+   "+ Add account". Assert `invoke` called with `('add_account', { name: <trimmed>, secret:
+   <raw, spaces still present> })` (whitespace stripping is core's job — assert the UI forwards
+   the raw secret) and that `goto('/settings')` fired.
+2. **Add — duplicate name:** mock `invoke` rejects with `"Account 'x' already exists"`; assert
+   the inline `.error` text renders and `goto` was **not** called.
+3. **Add — invalid secret:** mock rejects with an `Invalid secret: …` string; assert inline
+   error renders.
+4. **Add — submit gating:** empty name or empty secret leaves the primary button `disabled`.
+5. **Rename — happy path:** on a manage row, click ✎; assert an input appears (focused) with the
+   current name; change it, press Enter; assert `invoke('rename_account', { name: old, newName:
+   next })` and that the list re-renders via a follow-up `list_accounts`.
+6. **Rename — cancel:** Esc (or blur with unchanged/empty value) closes the editor without
+   calling `rename_account`.
+7. **Rename — collision:** mock rejects; assert the `.rename-error` text renders and the row
+   stays in edit mode.
+8. **Delete — modal + D4:** click 🗑; assert the confirm modal shows the "no recovery" copy and
+   that **the account's base32 secret is absent from the DOM** (the D4 guarantee — there's no
+   secret in scope to leak, so assert no secret-shaped text/no secret field). Cancel closes it
+   with no `invoke`.
+9. **Delete — confirm:** click Delete; assert `invoke('delete_account', { name })` then a
+   re-fetch (`list_accounts`) and the row disappears.
+10. **Re-fetch after mutation:** after add/rename/delete, assert `list_accounts` is re-invoked so
+    E1/E3 reflect the change.
+
+**Wiring:** add devDeps `vitest`, `@testing-library/svelte`, `@testing-library/jest-dom`,
+`jsdom`; add a `"test": "vitest run"` (and `"test:watch": "vitest"`) script to
+`authr_app/package.json`; add a minimal `vitest` config (jsdom environment, the
+`@sveltejs/vite-plugin-svelte` plugin, and a setup file importing `@testing-library/jest-dom`).
+Keep it a separate config from the Tauri `vite.config.ts` (or use `defineConfig` with a `test`
+block) — the Tauri dev-server settings (fixed port 1420, etc.) are irrelevant to tests.
+
+**Caveat:** Tier 1 mocks the backend, so it proves UI behavior only — it does **not** prove the
+Rust commands or that anything persists. That's Tier 2's job.
+
+### 9.2 Tier 2 — Rust command tests (no tray, no mock runtime)
+
+The Phase 3 commands in `authr_app/src-tauri/src/lib.rs` are already thin wrappers over
+`authr_core::accounts`; their **only** shell dependency is `storage_for(app)` →
+`app.path().app_config_dir()`. Make the bodies testable by extracting each into a plain helper
+that takes a `&Storage` (or `&dyn AccountStore`), leaving the `#[tauri::command]` as a
+one-liner:
+
+```rust
+// testable core of each command — no AppHandle, no Tauri
+fn add_account_impl(store: &Storage, name: String, secret: String) -> Result<AccountView, String> {
+    let mut all = store.load().map_err(|e| e.to_string())?;
+    let added = accounts::add_account(&mut all, name, secret).map_err(|e| e.to_string())?;
+    store.save(&all).map_err(|e| e.to_string())?;
+    Ok(AccountView::from(&added))
+}
+
+#[tauri::command]
+fn add_account(app: tauri::AppHandle, name: String, secret: String) -> Result<AccountView, String> {
+    add_account_impl(&storage_for(&app)?, name, secret)
+}
+```
+
+Do the same for `rename_account_impl(store, name, new_name) -> Result<(), String>` and
+`delete_account_impl(store, name) -> Result<(), String>`. (Optionally `list_accounts_impl` /
+`get_codes_impl` too, for symmetry.)
+
+**Tests** mirror `authr_core/tests/storage.rs`: build a `Storage::new(tempdir.path())` and call
+the `_impl` helpers directly. Since `_impl` lives in the bin/lib crate, either add a
+`#[cfg(test)] mod tests` inside `lib.rs` or expose the helpers `pub(crate)` and add
+`authr_app/src-tauri/tests/commands.rs`. Add `tempfile` as a `[dev-dependencies]` entry in
+`authr_app/src-tauri/Cargo.toml`.
+
+**What Tier 2 proves (that Tier 1 can't):** the real load → mutate → save round-trip, the exact
+error **strings** the webview will display (`AccountError` → `to_string()`), that
+`AccountView` carries no secret, and that the plaintext store on disk reflects each mutation.
+
+**Scenario checklist:**
+1. `add_account_impl` on an empty temp store → returns an `AccountView { name, issuer:None }`,
+   and reloading the store shows one account with the whitespace-stripped secret.
+2. `add_account_impl` duplicate name → `Err` whose string is the `Duplicate` message; store
+   unchanged.
+3. `add_account_impl` invalid secret → `Err` with the `InvalidSecret` string; store unchanged.
+4. `rename_account_impl` → reload shows the new name, same secret (codes unaffected).
+5. `rename_account_impl` collision → `Err` `Duplicate`; `rename_account_impl` on a missing name
+   → `Err` `NotFound`.
+6. `delete_account_impl` → reload shows the account gone; missing name → `Err` `NotFound`.
+7. (Optional) a returned `AccountView` serializes without a `secret` field (serde round-trip
+   assertion reinforcing D4).
+
+**Why not `tauri::test::mock_builder` / `MockRuntime`?** It would invoke through the real IPC
+handler (more faithful to serde marshalling), but under the mock runtime `app_config_dir()`
+still resolves to the real `~/Library/Application Support/com.wwwsteve.authr`, polluting the
+host — so you'd first have to make the storage dir injectable (managed `State`) anyway. The
+`_impl` extraction gets ~95% of the value for ~10% of the effort and keeps tests hermetic. If a
+future phase wants true IPC-level tests, the prerequisite is injecting the storage dir via Tauri
+`State` rather than computing it inside `storage_for`.
+
+### 9.3 Exit criteria for this testing work
+
+- `pnpm test` (Vitest) green with the Tier 1 scenario checklist covered; runs headless, no
+  tray, no real window.
+- `cargo test` still green, now including the Tier 2 `_impl` command tests over a tempfile store.
+- No regression to `pnpm build`, `pnpm check`, or the existing Tier 0 suites.
+- No WebDriver / Tier 3 dependency introduced.
