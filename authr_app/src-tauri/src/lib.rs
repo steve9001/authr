@@ -9,10 +9,13 @@ use authr_core::accounts;
 use authr_core::model::{AccountView, CodeView};
 use authr_core::storage::Storage;
 use authr_core::totp;
+use authr_core::vault::{self, AccountStore, SecretString, Session};
+use serde::Serialize;
+use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    ActivationPolicy, Manager, WindowEvent,
+    ActivationPolicy, Manager, State, WindowEvent,
 };
 use tauri_plugin_positioner::{Position, WindowExt};
 
@@ -21,26 +24,66 @@ const MAIN_WINDOW: &str = "main";
 /// Stable id for the tray menu's Quit item.
 const QUIT_MENU_ID: &str = "quit";
 
-/// The plaintext store rooted at this app's OS config dir. Phase 4 swaps the backend behind
-/// the same shape (UNIFIED_PLAN §3.2 item 4) — these call sites do not change.
+/// In-session unlock state (UNIFIED_PLAN D7): the passphrase held in memory for the life of
+/// the process once the store is unlocked. `None` = locked (or encryption not enabled). Held
+/// as a zeroizing [`SecretString`] so it isn't left lying in plain `String`s. The webview
+/// never sees it — only `unlock`/`set_password`/`change_password` write it, and only the Rust
+/// `Session` reads it to (de)crypt the store.
+#[derive(Default)]
+struct VaultSession(Mutex<Option<SecretString>>);
+
+/// `encryption_status()` payload — drives the Settings display and the unlock gate.
+#[derive(Serialize)]
+struct EncryptionStatus {
+    /// The store on disk is an encrypted vault.
+    enabled: bool,
+    /// Encrypted but no passphrase is held this session — the app must show `/unlock`.
+    locked: bool,
+}
+
+/// The store directory rooted at this app's OS config dir.
 fn storage_for(app: &tauri::AppHandle) -> Result<Storage, String> {
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     Ok(Storage::new(dir))
 }
 
-// Each command's testable core: a plain helper over a `&Storage` (the `AccountStore` seam),
-// with no `AppHandle` and no Tauri runtime, so Tier 2 can drive the real load → mutate → save
-// round-trip against a tempfile store (UNIFIED_PLAN §9.2). Each `#[tauri::command]` is the
-// one-liner that resolves the OS config dir via `storage_for` and delegates here.
+/// Build the right [`AccountStore`] backend for a mutation/read command: the encrypted
+/// [`Session`] when the store is a vault (requires the session passphrase — D7), else the
+/// plaintext [`Storage`]. The boxed trait object is exactly the seam the `_impl` helpers take,
+/// so their bodies are identical for both backends (UNIFIED_PLAN §3.2 item 4).
+fn account_store(
+    storage: Storage,
+    held: Option<SecretString>,
+) -> Result<Box<dyn AccountStore>, String> {
+    if vault::is_encrypted(storage.dir()) {
+        match held {
+            Some(passphrase) => Ok(Box::new(Session::resume(storage, passphrase))),
+            None => Err("Locked — unlock Authr first".to_string()),
+        }
+    } else {
+        Ok(Box::new(storage))
+    }
+}
+
+/// Clone the held passphrase (if any) out of the managed session lock.
+fn held_passphrase(vault: &State<VaultSession>) -> Result<Option<SecretString>, String> {
+    Ok(vault.0.lock().map_err(|e| e.to_string())?.clone())
+}
+
+// Each command's testable core: a plain helper over the `AccountStore` seam (the plaintext
+// `Storage` or the encrypted `Session`), with no `AppHandle` and no Tauri runtime, so Tier 2
+// can drive the real load → mutate → save round-trip against a tempfile store
+// (UNIFIED_PLAN §9.2). Each `#[tauri::command]` resolves the OS config dir + the session
+// passphrase and delegates here.
 
 /// E1's account list: name (+issuer) only, no codes, no secrets.
-fn list_accounts_impl(store: &Storage) -> Result<Vec<AccountView>, String> {
+fn list_accounts_impl(store: &dyn AccountStore) -> Result<Vec<AccountView>, String> {
     let accounts = store.load().map_err(|e| e.to_string())?;
     Ok(accounts.iter().map(AccountView::from).collect())
 }
 
 /// E1's live codes: each account projected to a `CodeView` (code + period boundary).
-fn get_codes_impl(store: &Storage) -> Result<Vec<CodeView>, String> {
+fn get_codes_impl(store: &dyn AccountStore) -> Result<Vec<CodeView>, String> {
     let accounts = store.load().map_err(|e| e.to_string())?;
     accounts
         .iter()
@@ -50,8 +93,13 @@ fn get_codes_impl(store: &Storage) -> Result<Vec<CodeView>, String> {
 
 /// E5 add core: validate the secret + reject a duplicate name in `authr_core`, persist, and
 /// return the created account projected to an `AccountView` (no secret crosses the bridge, D4).
-/// The secret's whitespace is stripped in core ("spaces ignored").
-fn add_account_impl(store: &Storage, name: String, secret: String) -> Result<AccountView, String> {
+/// The secret's whitespace is stripped in core ("spaces ignored"). When the backend is an
+/// encrypted `Session`, `save` re-encrypts silently with the in-memory passphrase (D7).
+fn add_account_impl(
+    store: &dyn AccountStore,
+    name: String,
+    secret: String,
+) -> Result<AccountView, String> {
     let mut all = store.load().map_err(|e| e.to_string())?;
     let added = accounts::add_account(&mut all, name, secret).map_err(|e| e.to_string())?;
     store.save(&all).map_err(|e| e.to_string())?;
@@ -59,50 +107,168 @@ fn add_account_impl(store: &Storage, name: String, secret: String) -> Result<Acc
 }
 
 /// Inline rename core. Rejects a name collision / missing account in core.
-fn rename_account_impl(store: &Storage, name: String, new_name: String) -> Result<(), String> {
+fn rename_account_impl(
+    store: &dyn AccountStore,
+    name: String,
+    new_name: String,
+) -> Result<(), String> {
     let mut all = store.load().map_err(|e| e.to_string())?;
     accounts::rename_account(&mut all, &name, new_name).map_err(|e| e.to_string())?;
     store.save(&all).map_err(|e| e.to_string())
 }
 
 /// Permanent delete core. No secret is returned (D4).
-fn delete_account_impl(store: &Storage, name: String) -> Result<(), String> {
+fn delete_account_impl(store: &dyn AccountStore, name: String) -> Result<(), String> {
     let mut all = store.load().map_err(|e| e.to_string())?;
     accounts::delete_account(&mut all, &name).map_err(|e| e.to_string())?;
     store.save(&all).map_err(|e| e.to_string())
 }
 
+// --- Phase 4 encryption cores (UNIFIED_PLAN §3.3) -------------------------------------------
+// Each returns the passphrase to cache in the session on success; the command wrapper stores
+// it in `VaultSession`. No passphrase ever crosses the bridge (D4) — these are Rust-internal.
+
+/// `encryption_status()` core: `enabled` = the store is a vault; `locked` = enabled and no
+/// passphrase is held this session (`unlocked` is false).
+fn encryption_status_impl(storage: &Storage, unlocked: bool) -> EncryptionStatus {
+    let enabled = vault::is_encrypted(storage.dir());
+    EncryptionStatus {
+        enabled,
+        locked: enabled && !unlocked,
+    }
+}
+
+/// `set_password(new)` core: enable encryption on a not-yet-encrypted store. Returns the new
+/// passphrase to hold for the session (the store is left unlocked).
+fn set_password_impl(storage: &Storage, new: &str) -> Result<SecretString, String> {
+    if vault::is_encrypted(storage.dir()) {
+        return Err("Encryption is already enabled".to_string());
+    }
+    Session::enable(Storage::new(storage.dir()), new).map_err(|e| e.to_string())?;
+    Ok(SecretString::from(new.to_owned()))
+}
+
+/// `change_password(old, new)` core: verify `old`, re-seal under `new`. Returns the new
+/// passphrase to hold for the session.
+fn change_password_impl(storage: &Storage, old: &str, new: &str) -> Result<SecretString, String> {
+    let mut session =
+        Session::unlock(Storage::new(storage.dir()), old).map_err(|e| e.to_string())?;
+    session.change_passphrase(new).map_err(|e| e.to_string())?;
+    Ok(SecretString::from(new.to_owned()))
+}
+
+/// `unlock(password)` core: verify the passphrase against the vault. Returns it to hold for
+/// the session (D7); a wrong passphrase yields the `"Incorrect password"` string.
+fn unlock_impl(storage: &Storage, password: &str) -> Result<SecretString, String> {
+    Session::unlock(Storage::new(storage.dir()), password).map_err(|e| e.to_string())?;
+    Ok(SecretString::from(password.to_owned()))
+}
+
 /// E1's account list: name (+issuer) only, no codes, no secrets.
 #[tauri::command]
-fn list_accounts(app: tauri::AppHandle) -> Result<Vec<AccountView>, String> {
-    list_accounts_impl(&storage_for(&app)?)
+fn list_accounts(
+    app: tauri::AppHandle,
+    vault: State<VaultSession>,
+) -> Result<Vec<AccountView>, String> {
+    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    list_accounts_impl(&*store)
 }
 
 /// E1's live codes: each account projected to a `CodeView` (code + period boundary), the only
 /// account-derived values that reach the webview. Computed in Rust (UNIFIED_PLAN §6).
 #[tauri::command]
-fn get_codes(app: tauri::AppHandle) -> Result<Vec<CodeView>, String> {
-    get_codes_impl(&storage_for(&app)?)
+fn get_codes(app: tauri::AppHandle, vault: State<VaultSession>) -> Result<Vec<CodeView>, String> {
+    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    get_codes_impl(&*store)
 }
 
 /// E5 add: validate the secret + reject a duplicate name in `authr_core`, persist, and return
 /// the created account projected to an `AccountView` (no secret crosses the bridge, D4). The
-/// secret's whitespace is stripped in core ("spaces ignored").
+/// secret's whitespace is stripped in core ("spaces ignored"). On an encrypted store the save
+/// re-encrypts with the in-memory passphrase (D7).
 #[tauri::command]
-fn add_account(app: tauri::AppHandle, name: String, secret: String) -> Result<AccountView, String> {
-    add_account_impl(&storage_for(&app)?, name, secret)
+fn add_account(
+    app: tauri::AppHandle,
+    vault: State<VaultSession>,
+    name: String,
+    secret: String,
+) -> Result<AccountView, String> {
+    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    add_account_impl(&*store, name, secret)
 }
 
 /// Inline rename from an E3 manage row. Rejects a name collision / missing account in core.
 #[tauri::command]
-fn rename_account(app: tauri::AppHandle, name: String, new_name: String) -> Result<(), String> {
-    rename_account_impl(&storage_for(&app)?, name, new_name)
+fn rename_account(
+    app: tauri::AppHandle,
+    vault: State<VaultSession>,
+    name: String,
+    new_name: String,
+) -> Result<(), String> {
+    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    rename_account_impl(&*store, name, new_name)
 }
 
 /// Permanent delete from the E3 delete-confirm modal. No secret is returned (D4).
 #[tauri::command]
-fn delete_account(app: tauri::AppHandle, name: String) -> Result<(), String> {
-    delete_account_impl(&storage_for(&app)?, name)
+fn delete_account(
+    app: tauri::AppHandle,
+    vault: State<VaultSession>,
+    name: String,
+) -> Result<(), String> {
+    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    delete_account_impl(&*store, name)
+}
+
+/// Whether the store is encrypted and, if so, whether it's locked this session — drives the
+/// Settings Encryption row and the `/unlock` gate (UNIFIED_PLAN §3.3, §3.4).
+#[tauri::command]
+fn encryption_status(app: tauri::AppHandle, vault: State<VaultSession>) -> EncryptionStatus {
+    // A failure to resolve the dir or read the lock can't mean "encrypted" — degrade to the
+    // plaintext/unlocked default so the UI never wedges on the gate.
+    let Ok(storage) = storage_for(&app) else {
+        return EncryptionStatus { enabled: false, locked: false };
+    };
+    let unlocked = held_passphrase(&vault).map(|p| p.is_some()).unwrap_or(false);
+    encryption_status_impl(&storage, unlocked)
+}
+
+/// E4 set-password: enable encryption, then hold the new passphrase for the session (D7).
+#[tauri::command]
+fn set_password(
+    app: tauri::AppHandle,
+    vault: State<VaultSession>,
+    new: String,
+) -> Result<(), String> {
+    let passphrase = set_password_impl(&storage_for(&app)?, &new)?;
+    *vault.0.lock().map_err(|e| e.to_string())? = Some(passphrase);
+    Ok(())
+}
+
+/// E4 change-password: verify the current passphrase, re-seal under the new one, hold the new.
+#[tauri::command]
+fn change_password(
+    app: tauri::AppHandle,
+    vault: State<VaultSession>,
+    old: String,
+    new: String,
+) -> Result<(), String> {
+    let passphrase = change_password_impl(&storage_for(&app)?, &old, &new)?;
+    *vault.0.lock().map_err(|e| e.to_string())? = Some(passphrase);
+    Ok(())
+}
+
+/// Unlock the store for the session (D7) — verify the passphrase, then hold it. The `/unlock`
+/// gate calls this when the app opens encrypted+locked.
+#[tauri::command]
+fn unlock(
+    app: tauri::AppHandle,
+    vault: State<VaultSession>,
+    password: String,
+) -> Result<(), String> {
+    let passphrase = unlock_impl(&storage_for(&app)?, &password)?;
+    *vault.0.lock().map_err(|e| e.to_string())? = Some(passphrase);
+    Ok(())
 }
 
 /// Toggle the popover: visible → hide; hidden → anchor under the tray icon, show, focus.
@@ -124,12 +290,17 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .manage(VaultSession::default())
         .invoke_handler(tauri::generate_handler![
             list_accounts,
             get_codes,
             add_account,
             rename_account,
-            delete_account
+            delete_account,
+            encryption_status,
+            set_password,
+            change_password,
+            unlock
         ])
         .setup(|app| {
             // Hide from the Dock / app menu at runtime too (belt-and-suspenders with
@@ -320,5 +491,85 @@ mod tests {
         let json = serde_json::to_string(&view).unwrap();
         assert!(!json.contains("secret"), "AccountView JSON leaked a secret field: {json}");
         assert!(!json.contains(TEST_SECRET), "AccountView JSON leaked the secret: {json}");
+    }
+
+    // --- Phase 4: encryption command cores (UNIFIED_PLAN §9 extended) ----------------------
+
+    // status on a plaintext store: not enabled, not locked.
+    #[test]
+    fn encryption_status_impl_plaintext_is_disabled() {
+        let (_dir, store) = store();
+        let s = encryption_status_impl(&store, false);
+        assert!(!s.enabled);
+        assert!(!s.locked);
+    }
+
+    // set_password encrypts the store: status flips to enabled, and locked tracks `unlocked`.
+    #[test]
+    fn set_password_impl_enables_encryption() {
+        let (_dir, store) = store();
+        add_account_impl(&store, "alice".to_string(), TEST_SECRET.to_string()).unwrap();
+
+        let _pass = set_password_impl(&store, "pw").unwrap();
+        assert!(vault::is_encrypted(store.dir()));
+        assert!(encryption_status_impl(&store, true).enabled);
+        assert!(encryption_status_impl(&store, false).locked, "no held passphrase ⇒ locked");
+        assert!(!encryption_status_impl(&store, true).locked, "held passphrase ⇒ unlocked");
+    }
+
+    // set_password on an already-encrypted store is rejected.
+    #[test]
+    fn set_password_impl_rejects_when_already_encrypted() {
+        let (_dir, store) = store();
+        set_password_impl(&store, "pw").unwrap();
+        let err = set_password_impl(&store, "pw2").unwrap_err();
+        assert_eq!(err, "Encryption is already enabled");
+    }
+
+    // The full command-layer round-trip: encrypt → lock → unlock → read, with a write that
+    // silently re-encrypts (D7), routed through `account_store` exactly like the commands.
+    #[test]
+    fn encrypted_round_trip_through_account_store() {
+        let (dir, store) = store();
+        let pass = set_password_impl(&store, "hunter2").unwrap();
+
+        // Unlocked: a mutation re-encrypts via the in-memory passphrase.
+        let unlocked = account_store(Storage::new(dir.path()), Some(pass)).unwrap();
+        add_account_impl(&*unlocked, "alice".to_string(), TEST_SECRET.to_string()).unwrap();
+
+        // Locked: no passphrase held ⇒ the store can't be opened.
+        let locked = account_store(Storage::new(dir.path()), None);
+        assert!(locked.is_err(), "locked store must refuse to build a backend");
+
+        // Wrong password is rejected; the right one unlocks.
+        assert_eq!(
+            unlock_impl(&store, "nope").unwrap_err(),
+            "Incorrect password"
+        );
+        let pass = unlock_impl(&store, "hunter2").unwrap();
+        let reopened = account_store(Storage::new(dir.path()), Some(pass)).unwrap();
+        let views = list_accounts_impl(&*reopened).unwrap();
+        assert_eq!(views.len(), 1);
+        assert_eq!(views[0].name, "alice");
+    }
+
+    // change_password verifies the old passphrase and re-seals under the new one.
+    #[test]
+    fn change_password_impl_reseals_and_rejects_wrong_old() {
+        let (dir, store) = store();
+        let pass = set_password_impl(&store, "old").unwrap();
+        let unlocked = account_store(Storage::new(dir.path()), Some(pass)).unwrap();
+        add_account_impl(&*unlocked, "alice".to_string(), TEST_SECRET.to_string()).unwrap();
+
+        assert_eq!(
+            change_password_impl(&store, "wrong", "new").unwrap_err(),
+            "Incorrect password"
+        );
+        let pass = change_password_impl(&store, "old", "new").unwrap();
+
+        // Old no longer opens it; the new passphrase (returned by change) does, data intact.
+        assert_eq!(unlock_impl(&store, "old").unwrap_err(), "Incorrect password");
+        let reopened = account_store(Storage::new(dir.path()), Some(pass)).unwrap();
+        assert_eq!(list_accounts_impl(&*reopened).unwrap()[0].name, "alice");
     }
 }

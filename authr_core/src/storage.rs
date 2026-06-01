@@ -14,6 +14,13 @@ pub enum StorageError {
     Io(#[from] std::io::Error),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
+    /// A crypto-layer failure surfaced through the `AccountStore` seam (UNIFIED_PLAN §3.2
+    /// item 4). The encrypted backend ([`crate::vault::Session`]) maps `age`/decrypt errors
+    /// into this so `load`/`save` keep the same `StorageError` return as the plaintext store —
+    /// the trait and every command call site stay unchanged. The variant carries a string
+    /// rather than a `VaultError` to avoid `storage` depending on the crypto module.
+    #[error("Vault error: {0}")]
+    Vault(String),
 }
 
 /// Plaintext account store rooted at an explicit directory.

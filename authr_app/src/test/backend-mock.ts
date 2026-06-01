@@ -9,14 +9,32 @@ export type AccountView = { name: string; issuer: string | null };
 
 let accounts: AccountView[] = [];
 
-/** Reset the backing store; call in `beforeEach`. */
+// Encryption state (UNIFIED_PLAN §3.3 Phase 4). `vaultPassword === null` ⇒ the store is
+// plaintext (encryption disabled); a string ⇒ encrypted with that passphrase. `unlocked`
+// mirrors the in-session passphrase hold (D7). Defaults: disabled + unlocked.
+let vaultPassword: string | null = null;
+let unlocked = true;
+
+/** Reset the backing store; call in `beforeEach`. Also resets encryption to disabled. */
 export function setAccounts(initial: AccountView[]): void {
   accounts = initial.map((a) => ({ ...a }));
+  vaultPassword = null;
+  unlocked = true;
 }
 
 /** Read the current store (for assertions). */
 export function getAccounts(): AccountView[] {
   return accounts;
+}
+
+/**
+ * Drive the encryption seam for a test. `password: null` (default) leaves the store
+ * plaintext; a string encrypts it, and `locked` controls whether this session holds the
+ * passphrase (locked ⇒ the `/unlock` gate).
+ */
+export function setEncryption(opts: { password?: string | null; locked?: boolean }): void {
+  vaultPassword = opts.password ?? null;
+  unlocked = vaultPassword === null ? true : !(opts.locked ?? false);
 }
 
 // Base32 (RFC 4648) after stripping whitespace — matches core's "spaces ignored"
@@ -61,6 +79,37 @@ export const invoke = vi.fn(
       case "delete_account": {
         const name = args?.name as string;
         accounts = accounts.filter((a) => a.name !== name);
+        return null;
+      }
+
+      // --- Phase 4 encryption commands (UNIFIED_PLAN §3.3) ---
+      case "encryption_status":
+        return {
+          enabled: vaultPassword !== null,
+          locked: vaultPassword !== null && !unlocked,
+        };
+
+      case "set_password": {
+        if (vaultPassword !== null) throw "Encryption is already enabled";
+        vaultPassword = args?.new as string;
+        unlocked = true;
+        return null;
+      }
+
+      case "change_password": {
+        const oldPw = args?.old as string;
+        if (vaultPassword === null) throw "Encryption is not enabled";
+        if (oldPw !== vaultPassword) throw "Incorrect password";
+        vaultPassword = args?.new as string;
+        unlocked = true;
+        return null;
+      }
+
+      case "unlock": {
+        const pw = args?.password as string;
+        if (vaultPassword === null) return null; // nothing to unlock
+        if (pw !== vaultPassword) throw "Incorrect password";
+        unlocked = true;
         return null;
       }
 

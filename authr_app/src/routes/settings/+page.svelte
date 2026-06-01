@@ -16,12 +16,23 @@
   // Delete-confirm modal: the account pending deletion (null = closed).
   let pendingDelete = $state<string | null>(null);
 
+  // Encryption state (UNIFIED_PLAN §3.4 E4 row): drives the Security row's On/Off display.
+  let encryptionEnabled = $state(false);
+
   async function refresh() {
     try {
       accounts = await invoke<AccountView[]>("list_accounts");
     } catch (e) {
       console.error("list_accounts failed", e);
       accounts = [];
+    }
+    try {
+      const s = await invoke<{ enabled: boolean; locked: boolean }>(
+        "encryption_status",
+      );
+      encryptionEnabled = s.enabled;
+    } catch (e) {
+      console.error("encryption_status failed", e);
     }
   }
 
@@ -86,16 +97,22 @@
     <h1>Settings</h1>
   </header>
 
-  <!-- SECURITY — Encryption row stubbed until Phase 4. -->
+  <!-- SECURITY — Encryption row (E4): set or change the password. -->
   <p class="section">SECURITY</p>
   <div class="card">
-    <div class="srow disabled">
+    <button class="srow srow-btn" onclick={() => goto("/settings/password")}>
       <div class="srow-text">
         <span class="srow-title">🔒 Encryption</span>
-        <span class="srow-sub">Password protects this device &amp; every backup</span>
+        <span class="srow-sub">
+          {encryptionEnabled
+            ? "Change your password"
+            : "Set a password to protect this device"}
+        </span>
       </div>
-      <span class="soon-tag">coming next</span>
-    </div>
+      <span class="state-tag" class:on={encryptionEnabled}>
+        {encryptionEnabled ? "On" : "Off"}
+      </span>
+    </button>
   </div>
 
   <!-- BACKUP — stubbed until Phase 5. -->
@@ -244,6 +261,31 @@
   }
   .srow.disabled {
     opacity: 0.62;
+  }
+  /* Encryption row is a full-width button into /settings/password. */
+  .srow-btn {
+    width: 100%;
+    background: transparent;
+    border: none;
+    text-align: left;
+    cursor: pointer;
+    color: inherit;
+    font: inherit;
+  }
+  .srow-btn:hover {
+    background: #2a2d33;
+  }
+  .state-tag {
+    font-size: 10px;
+    color: #8b8f96;
+    background: #34373d;
+    padding: 3px 8px;
+    border-radius: 10px;
+    white-space: nowrap;
+  }
+  .state-tag.on {
+    color: #4ec98a;
+    background: #1f3a2c;
   }
   .srow-text {
     display: flex;

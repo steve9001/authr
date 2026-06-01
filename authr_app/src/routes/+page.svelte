@@ -17,10 +17,30 @@
   let filter = $state("");
   let nowMs = $state(Date.now());
   let copiedName = $state<string | null>(null);
+  let locked = $state(false);
   let searchEl: HTMLInputElement | undefined;
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
 
+  // The unlock gate (UNIFIED_PLAN §3.4): if the store is encrypted+locked, divert to /unlock
+  // before touching codes. Returns true when locked (and navigation was kicked off).
+  async function gateIfLocked(): Promise<boolean> {
+    try {
+      const s = await invoke<{ enabled: boolean; locked: boolean }>(
+        "encryption_status",
+      );
+      if (s.enabled && s.locked) {
+        locked = true;
+        goto("/unlock");
+        return true;
+      }
+    } catch (e) {
+      console.error("encryption_status failed", e);
+    }
+    return false;
+  }
+
   async function refresh() {
+    if (locked) return;
     try {
       codes = await invoke<CodeView[]>("get_codes");
     } catch (e) {
@@ -66,8 +86,13 @@
   }
 
   onMount(() => {
-    refresh();
-    searchEl?.focus();
+    // Gate on the lock state first; only load codes if the store is open.
+    gateIfLocked().then((diverted) => {
+      if (!diverted) {
+        refresh();
+        searchEl?.focus();
+      }
+    });
 
     // Drive the bar and re-fetch on the real period rollover (not a client-side guess).
     const tick = setInterval(() => {
@@ -77,12 +102,17 @@
       }
     }, 250);
 
-    // Refresh + refocus the filter each time the popover reopens.
+    // Refresh + refocus the filter each time the popover reopens — re-checking the lock
+    // gate too, in case the session ended while hidden.
     const win = getCurrentWindow();
     const unlisten = win.onFocusChanged(({ payload: focused }) => {
       if (focused) {
-        refresh();
-        searchEl?.focus();
+        gateIfLocked().then((diverted) => {
+          if (!diverted) {
+            refresh();
+            searchEl?.focus();
+          }
+        });
       }
     });
 
