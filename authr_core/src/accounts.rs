@@ -1,5 +1,6 @@
 use crate::model::Account;
 use crate::totp;
+use serde::Serialize;
 use thiserror::Error;
 
 #[derive(Error, Debug, PartialEq, Eq)]
@@ -79,6 +80,62 @@ pub fn delete_account(accounts: &mut Vec<Account>, name: &str) -> Result<(), Acc
         .ok_or_else(|| AccountError::NotFound(name.to_string()))?;
     accounts.remove(idx);
     Ok(())
+}
+
+/// Counts reported back from an additive import merge (UNIFIED_PLAN D11), shown in the
+/// one-tap result toast. Serializable because it is the `import_backup` command's return
+/// value — but it carries only counts, never a secret (D4).
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct ImportSummary {
+    /// New accounts added as-is (secret absent locally, name free).
+    pub added: usize,
+    /// Accounts already present locally (secret matched) — left untouched (idempotent).
+    pub skipped: usize,
+    /// Added under a de-duplicated label because the name collided with a *different* secret.
+    pub relabeled: usize,
+}
+
+/// Find a free `Name (imported)` label (then `Name (imported 2)`, …) so a relabeled import
+/// never collides with an existing name — keeping the store's name-uniqueness invariant.
+fn deduplicated_label(base: &str, existing: &[Account]) -> String {
+    let first = format!("{base} (imported)");
+    if !existing.iter().any(|a| a.name == first) {
+        return first;
+    }
+    (2..)
+        .map(|n| format!("{base} (imported {n})"))
+        .find(|candidate| !existing.iter().any(|a| &a.name == candidate))
+        .expect("an unbounded counter always finds a free label")
+}
+
+/// Additive, idempotent, rename-safe merge of `imported` into `existing` (UNIFIED_PLAN D11).
+///
+/// Identity is the **immutable base32 secret**, not the editable name, so the merge is
+/// rename-safe and idempotent. Per-account rules:
+///   * secret already present locally → **skip** (local name/label wins; never overwrites),
+///   * secret absent + name free → **add as-is**,
+///   * secret absent + name collides with a *different* secret → **add under a
+///     de-duplicated label** (`Name (imported)`).
+///
+/// Never deletes and never overwrites — this is additive union, not delete-aware sync (D11).
+/// The caller persists `existing` afterward (re-encrypting via the session passphrase if the
+/// live store is an unlocked vault, D7). Runs entirely in core, so no secret crosses the
+/// bridge (D4).
+pub fn merge_accounts(existing: &mut Vec<Account>, imported: Vec<Account>) -> ImportSummary {
+    let mut summary = ImportSummary::default();
+    for incoming in imported {
+        if existing.iter().any(|a| a.secret == incoming.secret) {
+            summary.skipped += 1;
+        } else if existing.iter().any(|a| a.name == incoming.name) {
+            let name = deduplicated_label(&incoming.name, existing);
+            existing.push(Account { name, ..incoming });
+            summary.relabeled += 1;
+        } else {
+            existing.push(incoming);
+            summary.added += 1;
+        }
+    }
+    summary
 }
 
 #[cfg(test)]
@@ -204,5 +261,79 @@ mod tests {
         let mut accounts: Vec<Account> = Vec::new();
         let err = delete_account(&mut accounts, "ghost").unwrap_err();
         assert_eq!(err, AccountError::NotFound("ghost".to_string()));
+    }
+
+    // --- merge_accounts (D11) ---------------------------------------------------------------
+
+    // A distinct base32 secret per account so identity-on-secret is exercised.
+    const SECRET_A: &str = "JBSWY3DPEHPK3PXP";
+    const SECRET_B: &str = "GEZDGNBVGY3TQOJQ";
+    const SECRET_C: &str = "KRSXG5BAONSWG4TFOQ======";
+
+    fn acct(name: &str, secret: &str) -> Account {
+        Account::new(name.to_string(), secret.to_string())
+    }
+
+    // secret absent + name free → added as-is.
+    #[test]
+    fn merge_adds_new_accounts() {
+        let mut existing = vec![acct("alice", SECRET_A)];
+        let summary = merge_accounts(&mut existing, vec![acct("bob", SECRET_B)]);
+        assert_eq!(summary, ImportSummary { added: 1, skipped: 0, relabeled: 0 });
+        assert_eq!(existing.len(), 2);
+        assert_eq!(existing[1].name, "bob");
+    }
+
+    // secret already present (even under a different local name) → skipped, local name wins.
+    #[test]
+    fn merge_skips_present_secret_and_keeps_local_name() {
+        let mut existing = vec![acct("alice-local", SECRET_A)];
+        let summary = merge_accounts(&mut existing, vec![acct("alice-other", SECRET_A)]);
+        assert_eq!(summary, ImportSummary { added: 0, skipped: 1, relabeled: 0 });
+        assert_eq!(existing.len(), 1);
+        assert_eq!(existing[0].name, "alice-local", "local name/label wins");
+    }
+
+    // secret absent + name collides with a *different* secret → relabeled, never overwritten.
+    #[test]
+    fn merge_relabels_name_collision_with_different_secret() {
+        let mut existing = vec![acct("work", SECRET_A)];
+        let summary = merge_accounts(&mut existing, vec![acct("work", SECRET_B)]);
+        assert_eq!(summary, ImportSummary { added: 0, skipped: 0, relabeled: 1 });
+        assert_eq!(existing.len(), 2);
+        assert_eq!(existing[0].name, "work");
+        assert_eq!(existing[0].secret, SECRET_A, "original untouched");
+        assert_eq!(existing[1].name, "work (imported)");
+        assert_eq!(existing[1].secret, SECRET_B);
+    }
+
+    // A repeated relabel collision falls through to a numbered label.
+    #[test]
+    fn merge_relabel_avoids_existing_imported_label() {
+        let mut existing = vec![acct("work", SECRET_A), acct("work (imported)", SECRET_B)];
+        let summary = merge_accounts(&mut existing, vec![acct("work", SECRET_C)]);
+        assert_eq!(summary.relabeled, 1);
+        assert_eq!(existing[2].name, "work (imported 2)");
+    }
+
+    // Idempotent: re-importing the same file is a pure no-op (everything skipped).
+    #[test]
+    fn merge_is_idempotent() {
+        let imported = vec![acct("alice", SECRET_A), acct("bob", SECRET_B)];
+        let mut existing: Vec<Account> = Vec::new();
+        let first = merge_accounts(&mut existing, imported.clone());
+        assert_eq!(first, ImportSummary { added: 2, skipped: 0, relabeled: 0 });
+
+        let second = merge_accounts(&mut existing, imported);
+        assert_eq!(second, ImportSummary { added: 0, skipped: 2, relabeled: 0 });
+        assert_eq!(existing.len(), 2, "re-import added nothing");
+    }
+
+    // Merge never deletes: a local-only account survives importing a file that lacks it.
+    #[test]
+    fn merge_never_deletes_local_only_accounts() {
+        let mut existing = vec![acct("local-only", SECRET_A)];
+        merge_accounts(&mut existing, vec![acct("bob", SECRET_B)]);
+        assert!(existing.iter().any(|a| a.name == "local-only"));
     }
 }

@@ -5,12 +5,13 @@
 //! commands (`list_accounts`, `get_codes`) read through `authr_core::storage::Storage` rooted
 //! at the OS config dir. Secrets never cross the bridge (D4) — only `AccountView`/`CodeView`.
 
-use authr_core::accounts;
+use authr_core::accounts::{self, ImportSummary};
 use authr_core::model::{AccountView, CodeView};
 use authr_core::storage::Storage;
 use authr_core::totp;
 use authr_core::vault::{self, AccountStore, SecretString, Session};
 use serde::Serialize;
+use std::fs;
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -164,6 +165,53 @@ fn unlock_impl(storage: &Storage, password: &str) -> Result<SecretString, String
     Ok(SecretString::from(password.to_owned()))
 }
 
+// --- Phase 5 backup/import cores (UNIFIED_PLAN §3.3, §5) ------------------------------------
+
+/// `export_backup` core: load the live accounts through the [`AccountStore`] seam and write a
+/// `.authr` file at `dest_path`. `Some(pw)` seals it under the backup's **own** password via
+/// the shared `age` path (D6); `None` writes plaintext JSON (the UI requires an explicit
+/// confirmation before reaching here). No secret returns to the webview — the bytes go to disk.
+fn export_backup_impl(
+    store: &dyn AccountStore,
+    dest_path: &str,
+    password: Option<String>,
+) -> Result<(), String> {
+    let accounts = store.load().map_err(|e| e.to_string())?;
+    let bytes = match password {
+        Some(pw) => vault::encrypt_accounts(&pw, &accounts).map_err(|e| e.to_string())?,
+        None => serde_json::to_vec_pretty(&accounts).map_err(|e| e.to_string())?,
+    };
+    fs::write(dest_path, bytes).map_err(|e| e.to_string())
+}
+
+/// `import_backup` core: read the `.authr` at `src_path`, decrypt it if encrypted, and merge
+/// it into the live store — additive, idempotent, keyed on the secret, never deleting or
+/// overwriting (D11). The merge runs in `authr_core`, so no secret crosses the bridge (D4).
+///
+/// `Some(pw)` decrypts an encrypted backup; with `None`, an encrypted file is refused with a
+/// distinguishable message so the UI knows to prompt for that file's password. Saving through
+/// the [`AccountStore`] seam means an unlocked encrypted live store re-encrypts the merged
+/// result via the in-memory passphrase (D7).
+fn import_backup_impl(
+    store: &dyn AccountStore,
+    src_path: &str,
+    password: Option<String>,
+) -> Result<ImportSummary, String> {
+    let bytes = fs::read(src_path).map_err(|e| e.to_string())?;
+    let imported = match password {
+        Some(pw) => vault::decrypt_accounts(&pw, &bytes).map_err(|e| e.to_string())?,
+        None if vault::is_encrypted_data(&bytes) => {
+            return Err("This backup is encrypted — enter its password".to_string());
+        }
+        None => serde_json::from_slice(&bytes)
+            .map_err(|e| format!("Not a valid backup file: {e}"))?,
+    };
+    let mut existing = store.load().map_err(|e| e.to_string())?;
+    let summary = accounts::merge_accounts(&mut existing, imported);
+    store.save(&existing).map_err(|e| e.to_string())?;
+    Ok(summary)
+}
+
 /// E1's account list: name (+issuer) only, no codes, no secrets.
 #[tauri::command]
 fn list_accounts(
@@ -271,6 +319,36 @@ fn unlock(
     Ok(())
 }
 
+/// E6 export: write the live accounts to a user-picked `.authr` path. `Some(pw)` encrypts the
+/// backup with its **own** password (D6); `None` writes plaintext JSON (the UI gates this
+/// behind an explicit confirmation). Reads through the session-aware store, so the live vault
+/// must be unlocked to export (D7).
+#[tauri::command]
+fn export_backup(
+    app: tauri::AppHandle,
+    vault: State<VaultSession>,
+    dest_path: String,
+    password: Option<String>,
+) -> Result<(), String> {
+    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    export_backup_impl(&*store, &dest_path, password)
+}
+
+/// Import row: additive one-tap merge from a user-picked `.authr` file, keyed on the secret
+/// (D11). `Some(pw)` decrypts an encrypted backup. Returns `{ added, skipped, relabeled }` for
+/// the toast — no secret crosses the bridge (D4). On an unlocked encrypted store the merged
+/// result is re-encrypted on save via the in-memory passphrase (D7).
+#[tauri::command]
+fn import_backup(
+    app: tauri::AppHandle,
+    vault: State<VaultSession>,
+    src_path: String,
+    password: Option<String>,
+) -> Result<ImportSummary, String> {
+    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    import_backup_impl(&*store, &src_path, password)
+}
+
 /// Toggle the popover: visible → hide; hidden → anchor under the tray icon, show, focus.
 fn toggle_main_window(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
@@ -290,6 +368,8 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_positioner::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_fs::init())
         .manage(VaultSession::default())
         .invoke_handler(tauri::generate_handler![
             list_accounts,
@@ -300,7 +380,9 @@ pub fn run() {
             encryption_status,
             set_password,
             change_password,
-            unlock
+            unlock,
+            export_backup,
+            import_backup
         ])
         .setup(|app| {
             // Hide from the Dock / app menu at runtime too (belt-and-suspenders with
@@ -571,5 +653,148 @@ mod tests {
         assert_eq!(unlock_impl(&store, "old").unwrap_err(), "Incorrect password");
         let reopened = account_store(Storage::new(dir.path()), Some(pass)).unwrap();
         assert_eq!(list_accounts_impl(&*reopened).unwrap()[0].name, "alice");
+    }
+
+    // --- Phase 5: backup/import command cores (UNIFIED_PLAN §5, §9.2 extended) --------------
+
+    const SECRET_B: &str = "GEZDGNBVGY3TQOJQ";
+
+    // Seed two accounts into a plaintext store and return its dir + a backup path inside it.
+    fn store_with_two() -> (TempDir, Storage, std::path::PathBuf) {
+        let (dir, store) = store();
+        add_account_impl(&store, "alice".to_string(), TEST_SECRET.to_string()).unwrap();
+        add_account_impl(&store, "bob".to_string(), SECRET_B.to_string()).unwrap();
+        let backup = dir.path().join("backup.authr");
+        (dir, store, backup)
+    }
+
+    // Encrypted export → the file is sealed (not readable JSON) and round-trips back via import.
+    #[test]
+    fn export_encrypted_round_trips_through_import() {
+        let (_dir, live, backup) = store_with_two();
+        let dest = backup.to_string_lossy().into_owned();
+        export_backup_impl(&live, &dest, Some("backup-pw".to_string())).unwrap();
+
+        // On disk it's an age payload, and the plaintext secret is absent.
+        let bytes = fs::read(&backup).unwrap();
+        assert!(vault::is_encrypted_data(&bytes));
+        assert!(!String::from_utf8_lossy(&bytes).contains(TEST_SECRET));
+
+        // Import into a fresh empty store merges both accounts back.
+        let (_d2, fresh) = store();
+        let summary =
+            import_backup_impl(&fresh, &dest, Some("backup-pw".to_string())).unwrap();
+        assert_eq!(summary, ImportSummary { added: 2, skipped: 0, relabeled: 0 });
+        let names: Vec<_> = fresh.load().unwrap().into_iter().map(|a| a.name).collect();
+        assert_eq!(names, vec!["alice", "bob"]);
+    }
+
+    // Plaintext export → human-readable JSON containing the secrets; imports back without a pw.
+    #[test]
+    fn export_plaintext_is_readable_json_and_imports() {
+        let (_dir, live, backup) = store_with_two();
+        let dest = backup.to_string_lossy().into_owned();
+        export_backup_impl(&live, &dest, None).unwrap();
+
+        let text = fs::read_to_string(&backup).unwrap();
+        assert!(!vault::is_encrypted_data(text.as_bytes()));
+        assert!(text.contains(TEST_SECRET), "plaintext backup should expose the secret");
+        assert!(text.contains("alice"));
+
+        let (_d2, fresh) = store();
+        let summary = import_backup_impl(&fresh, &dest, None).unwrap();
+        assert_eq!(summary.added, 2);
+    }
+
+    // Re-importing a file whose accounts already exist is a pure no-op (idempotent, D11).
+    #[test]
+    fn re_import_existing_accounts_is_a_no_op() {
+        let (_dir, store, backup) = store_with_two();
+        let dest = backup.to_string_lossy().into_owned();
+        export_backup_impl(&store, &dest, None).unwrap();
+
+        // Import back into the *same* store: both secrets already present → all skipped.
+        let summary = import_backup_impl(&store, &dest, None).unwrap();
+        assert_eq!(summary, ImportSummary { added: 0, skipped: 2, relabeled: 0 });
+        assert_eq!(store.load().unwrap().len(), 2);
+    }
+
+    // Importing new accounts merges them without touching the existing ones.
+    #[test]
+    fn import_adds_new_without_disturbing_existing() {
+        // A backup holding only "carol".
+        let (_src, src_store, backup) = {
+            let (dir, store) = store();
+            add_account_impl(&store, "carol".to_string(), SECRET_B.to_string()).unwrap();
+            let b = dir.path().join("carol.authr");
+            (dir, store, b)
+        };
+        let dest = backup.to_string_lossy().into_owned();
+        export_backup_impl(&src_store, &dest, None).unwrap();
+
+        // A live store holding only "alice".
+        let (_dir, live) = store();
+        add_account_impl(&live, "alice".to_string(), TEST_SECRET.to_string()).unwrap();
+
+        let summary = import_backup_impl(&live, &dest, None).unwrap();
+        assert_eq!(summary, ImportSummary { added: 1, skipped: 0, relabeled: 0 });
+        let names: Vec<_> = live.load().unwrap().into_iter().map(|a| a.name).collect();
+        assert_eq!(names, vec!["alice", "carol"]);
+    }
+
+    // A wrong backup password is rejected with the "Incorrect password" string.
+    #[test]
+    fn import_rejects_wrong_backup_password() {
+        let (_dir, live, backup) = store_with_two();
+        let dest = backup.to_string_lossy().into_owned();
+        export_backup_impl(&live, &dest, Some("right-pw".to_string())).unwrap();
+
+        let (_d2, fresh) = store();
+        let err = import_backup_impl(&fresh, &dest, Some("wrong-pw".to_string())).unwrap_err();
+        assert_eq!(err, "Incorrect password");
+        assert!(fresh.load().unwrap().is_empty(), "nothing imported on a bad password");
+    }
+
+    // An encrypted backup imported without a password is refused distinguishably so the UI
+    // knows to prompt for the file's password.
+    #[test]
+    fn import_encrypted_without_password_asks_for_one() {
+        let (_dir, live, backup) = store_with_two();
+        let dest = backup.to_string_lossy().into_owned();
+        export_backup_impl(&live, &dest, Some("pw".to_string())).unwrap();
+
+        let (_d2, fresh) = store();
+        let err = import_backup_impl(&fresh, &dest, None).unwrap_err();
+        assert!(err.contains("encrypted"), "unexpected error: {err}");
+    }
+
+    // The merge re-encrypts through the session seam when the live store is an unlocked vault
+    // (D7): import into an encrypted store, then re-open it and confirm the merged data is there.
+    #[test]
+    fn import_into_unlocked_vault_re_encrypts() {
+        // A plaintext backup with "carol".
+        let (_src, src_store, backup) = {
+            let (dir, store) = store();
+            add_account_impl(&store, "carol".to_string(), SECRET_B.to_string()).unwrap();
+            let b = dir.path().join("carol.authr");
+            (dir, store, b)
+        };
+        let dest = backup.to_string_lossy().into_owned();
+        export_backup_impl(&src_store, &dest, None).unwrap();
+
+        // An encrypted live store (unlocked) holding "alice".
+        let (dir, store) = store();
+        let pass = set_password_impl(&store, "vault-pw").unwrap();
+        let unlocked = account_store(Storage::new(dir.path()), Some(pass)).unwrap();
+        add_account_impl(&*unlocked, "alice".to_string(), TEST_SECRET.to_string()).unwrap();
+
+        import_backup_impl(&*unlocked, &dest, None).unwrap();
+
+        // Re-open from disk with the vault passphrase: both accounts present, still encrypted.
+        let reopened =
+            account_store(Storage::new(dir.path()), Some(unlock_impl(&store, "vault-pw").unwrap()))
+                .unwrap();
+        let names: Vec<_> = list_accounts_impl(&*reopened).unwrap().into_iter().map(|v| v.name).collect();
+        assert_eq!(names, vec!["alice", "carol"]);
     }
 }

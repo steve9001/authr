@@ -61,6 +61,29 @@ pub fn is_encrypted(dir: &Path) -> bool {
     dir.join(VAULT_FILE).exists()
 }
 
+/// Whether `bytes` is an `age`-encrypted payload rather than plaintext JSON. The import flow
+/// (UNIFIED_PLAN §5 Phase 5) uses this to tell an encrypted `.authr` backup from a plaintext
+/// one so it can prompt for the file's password. `age`'s binary format begins with its
+/// version line `age-encryption.org/v1`.
+pub fn is_encrypted_data(bytes: &[u8]) -> bool {
+    bytes.starts_with(b"age-encryption.org")
+}
+
+/// Seal a set of accounts under a **backup's own** password (UNIFIED_PLAN D6) — independent of
+/// any at-rest passphrase. Reuses the same `age` scrypt+AEAD path as the live vault so the
+/// `.authr` file round-trips back through [`decrypt_accounts`]. No hand-rolled crypto.
+pub fn encrypt_accounts(password: &str, accounts: &[Account]) -> Result<Vec<u8>, VaultError> {
+    let plaintext = serde_json::to_vec(accounts)?;
+    encrypt_bytes(&SecretString::from(password.to_owned()), &plaintext)
+}
+
+/// Open an encrypted backup produced by [`encrypt_accounts`]. A wrong password yields
+/// [`VaultError::WrongPassphrase`] (surfaced to the import UI as "Incorrect password").
+pub fn decrypt_accounts(password: &str, ciphertext: &[u8]) -> Result<Vec<Account>, VaultError> {
+    let plaintext = decrypt_bytes(&SecretString::from(password.to_owned()), ciphertext)?;
+    Ok(serde_json::from_slice(&plaintext)?)
+}
+
 #[derive(Error, Debug)]
 pub enum VaultError {
     /// Decryption failed because the supplied passphrase was wrong — the one error the unlock
@@ -292,6 +315,34 @@ mod tests {
     fn empty_dir_is_not_encrypted() {
         let dir = TempDir::new().unwrap();
         assert!(!is_encrypted(dir.path()));
+    }
+
+    // Backup helpers (D6): encrypt under the backup's own password and read it back.
+    #[test]
+    fn encrypt_decrypt_accounts_round_trips() {
+        let accounts = vec![acct("alice"), acct("bob")];
+        let sealed = encrypt_accounts("backup-pw", &accounts).unwrap();
+        assert!(is_encrypted_data(&sealed));
+        let opened = decrypt_accounts("backup-pw", &sealed).unwrap();
+        let names: Vec<_> = opened.iter().map(|a| a.name.clone()).collect();
+        assert_eq!(names, vec!["alice", "bob"]);
+        assert_eq!(opened[0].secret, SECRET);
+    }
+
+    #[test]
+    fn decrypt_accounts_rejects_wrong_password() {
+        let sealed = encrypt_accounts("right", &[acct("alice")]).unwrap();
+        assert!(matches!(
+            decrypt_accounts("wrong", &sealed),
+            Err(VaultError::WrongPassphrase)
+        ));
+    }
+
+    // Plaintext JSON is not mistaken for an encrypted payload.
+    #[test]
+    fn plaintext_json_is_not_detected_as_encrypted() {
+        let json = serde_json::to_vec(&[acct("alice")]).unwrap();
+        assert!(!is_encrypted_data(&json));
     }
 
     // The ciphertext on disk never contains the plaintext secret (D6/at-rest guarantee).

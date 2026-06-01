@@ -6,8 +6,19 @@ import { vi } from "vitest";
 // `map_err(|e| e.to_string())`), name mutation on rename, removal on delete, and
 // a secret-free `AccountView` ({ name, issuer }) projection out of `list_accounts`.
 export type AccountView = { name: string; issuer: string | null };
+export type ImportSummary = { added: number; skipped: number; relabeled: number };
 
 let accounts: AccountView[] = [];
+
+// Backup/import seam (UNIFIED_PLAN §5). Tier 1 mocks the backend, so we don't move real
+// bytes through a file — we record the last export args for assertions and drive import via
+// a configurable result / encrypted-file scenario.
+let lastExport: { destPath: string; password: string | null } | null = null;
+let importResult: ImportSummary = { added: 0, skipped: 0, relabeled: 0 };
+// When set, importing this with a null password throws the "encrypted" error (so the UI
+// prompts), and only `importPassword` decrypts it.
+let importEncrypted = false;
+let importPassword: string | null = null;
 
 // Encryption state (UNIFIED_PLAN §3.3 Phase 4). `vaultPassword === null` ⇒ the store is
 // plaintext (encryption disabled); a string ⇒ encrypted with that passphrase. `unlocked`
@@ -20,6 +31,30 @@ export function setAccounts(initial: AccountView[]): void {
   accounts = initial.map((a) => ({ ...a }));
   vaultPassword = null;
   unlocked = true;
+  lastExport = null;
+  importResult = { added: 0, skipped: 0, relabeled: 0 };
+  importEncrypted = false;
+  importPassword = null;
+}
+
+/** The args of the last `export_backup` call (for assertions). */
+export function getLastExport(): { destPath: string; password: string | null } | null {
+  return lastExport;
+}
+
+/**
+ * Drive the import seam for a test. `result` is the `ImportSummary` a successful import
+ * returns; `encrypted`/`password` make a null-password import throw the "encrypted" error
+ * (so the UI prompts) and require `password` to succeed.
+ */
+export function setImport(opts: {
+  result?: ImportSummary;
+  encrypted?: boolean;
+  password?: string;
+}): void {
+  if (opts.result) importResult = opts.result;
+  importEncrypted = opts.encrypted ?? false;
+  importPassword = opts.password ?? null;
 }
 
 /** Read the current store (for assertions). */
@@ -113,6 +148,26 @@ export const invoke = vi.fn(
         return null;
       }
 
+      // --- Phase 5 backup/import commands (UNIFIED_PLAN §3.3, §5) ---
+      case "export_backup": {
+        lastExport = {
+          destPath: args?.destPath as string,
+          password: (args?.password as string | null) ?? null,
+        };
+        return null;
+      }
+
+      case "import_backup": {
+        const password = (args?.password as string | null) ?? null;
+        if (importEncrypted && password === null) {
+          throw "This backup is encrypted — enter its password";
+        }
+        if (importEncrypted && password !== importPassword) {
+          throw "Incorrect password";
+        }
+        return { ...importResult };
+      }
+
       default:
         throw `unexpected command: ${cmd}`;
     }
@@ -128,3 +183,9 @@ export function getCurrentWindow() {
 // `@tauri-apps/plugin-clipboard-manager` — only E1 (the codes view) uses it; the
 // Phase 3 settings pages don't, but it's harmless to stub for parity.
 export const writeText = vi.fn();
+
+// `@tauri-apps/plugin-dialog` — `save()` picks an export path (E6), `open()` picks an import
+// file. Both default to a path; tests override with `mockResolvedValueOnce(null)` to model a
+// cancelled dialog.
+export const save = vi.fn(async (): Promise<string | null> => "/tmp/authr-vault.authr");
+export const open = vi.fn(async (): Promise<string | null> => "/tmp/import.authr");

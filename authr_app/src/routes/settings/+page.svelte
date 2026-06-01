@@ -1,11 +1,25 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
+  import { open } from "@tauri-apps/plugin-dialog";
   import { goto } from "$app/navigation";
 
   type AccountView = { name: string; issuer: string | null };
+  type ImportSummary = { added: number; skipped: number; relabeled: number };
 
   let accounts = $state<AccountView[]>([]);
+
+  // Import flow (D11): pick a .authr, prompt for its password if it's encrypted, then merge.
+  // `importPath` non-null ⇒ the password prompt is open for that file.
+  let importPath = $state<string | null>(null);
+  let importPw = $state("");
+  let importPwError = $state<string | null>(null);
+  let importBusy = $state(false);
+  let importPwEl = $state<HTMLInputElement | undefined>();
+
+  // One-tap result toast (success or error), auto-dismissed.
+  let toast = $state<string | null>(null);
+  let toastTimer: ReturnType<typeof setTimeout> | undefined;
 
   // Inline-rename state: the name of the row being edited, plus the draft + any error.
   let editingName = $state<string | null>(null);
@@ -77,11 +91,82 @@
     await refresh();
   }
 
+  function showToast(msg: string) {
+    toast = msg;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => (toast = null), 4000);
+  }
+
+  // Honest, count-only toast (no secret crosses the bridge, D4).
+  function summaryToast(s: ImportSummary): string {
+    if (s.added === 0 && s.relabeled === 0) return "Nothing new to import";
+    const parts = [`Imported ${s.added} new ${s.added === 1 ? "account" : "accounts"}`];
+    if (s.relabeled) parts.push(`${s.relabeled} relabeled`);
+    if (s.skipped) parts.push(`${s.skipped} already present`);
+    return parts.join(" · ");
+  }
+
+  async function startImport() {
+    const picked = await open({
+      multiple: false,
+      filters: [{ name: "Authr backup", extensions: ["authr", "json"] }],
+    });
+    if (typeof picked !== "string") return; // cancelled
+    await attemptImport(picked, null);
+  }
+
+  // Try a merge; an encrypted file with no password opens the prompt, a wrong password
+  // surfaces inline in that prompt, anything else becomes an error toast.
+  async function attemptImport(path: string, password: string | null) {
+    importBusy = true;
+    try {
+      const summary = await invoke<ImportSummary>("import_backup", {
+        srcPath: path,
+        password,
+      });
+      importPath = null;
+      importPw = "";
+      importPwError = null;
+      showToast(summaryToast(summary));
+      await refresh();
+    } catch (e) {
+      const msg = String(e);
+      if (password === null && msg.toLowerCase().includes("encrypted")) {
+        importPath = path; // open the password prompt for this file
+        importPw = "";
+        importPwError = null;
+      } else if (importPath) {
+        importPwError = msg; // already prompting → wrong password / other failure
+      } else {
+        showToast(msg);
+      }
+    } finally {
+      importBusy = false;
+    }
+  }
+
+  function submitImportPassword() {
+    if (!importPath || !importPw) return;
+    attemptImport(importPath, importPw);
+  }
+
+  function cancelImport() {
+    importPath = null;
+    importPw = "";
+    importPwError = null;
+  }
+
+  // Focus the password field when the encrypted-import prompt opens.
+  $effect(() => {
+    if (importPath) tick().then(() => importPwEl?.focus());
+  });
+
   onMount(() => {
     refresh();
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
-        if (pendingDelete) pendingDelete = null;
+        if (importPath) cancelImport();
+        else if (pendingDelete) pendingDelete = null;
         else if (editingName) cancelRename();
         else goto("/");
       }
@@ -115,17 +200,28 @@
     </button>
   </div>
 
-  <!-- BACKUP — stubbed until Phase 5. -->
+  <!-- BACKUP — export a .authr file (D6) and import/merge from one (D11). -->
   <p class="section">BACKUP</p>
   <div class="card">
-    <div class="srow disabled">
+    <button class="srow srow-btn" onclick={() => goto("/settings/backup")}>
       <div class="srow-text">
         <span class="srow-title">⬇ Back up accounts</span>
-        <span class="srow-sub">Save the accounts file wherever you like</span>
+        <span class="srow-sub">Save an .authr file, encrypted or plain</span>
       </div>
-      <span class="soon-tag">coming next</span>
-    </div>
+      <span class="chev">→</span>
+    </button>
+    <button class="srow srow-btn" onclick={startImport} disabled={importBusy}>
+      <div class="srow-text">
+        <span class="srow-title">⬆ Import accounts</span>
+        <span class="srow-sub">Merge accounts from an .authr file</span>
+      </div>
+      <span class="chev">→</span>
+    </button>
   </div>
+  <p class="caveat">
+    Import <strong>adds</strong> accounts and never deletes — re-importing an old
+    backup can bring back an account you deleted here.
+  </p>
 
   <!-- ACCOUNTS · N — manage rows (rename / delete), then Add account. -->
   <p class="section">ACCOUNTS · {accounts.length}</p>
@@ -194,6 +290,50 @@
   </div>
 {/if}
 
+{#if importPath}
+  <!-- Encrypted-import prompt: asks for THAT file's password (independent of the live store). -->
+  <div
+    class="overlay"
+    role="presentation"
+    onclick={(e) => {
+      if (e.target === e.currentTarget) cancelImport();
+    }}
+  >
+    <div class="modal" role="dialog" aria-modal="true">
+      <p class="modal-title">Encrypted backup</p>
+      <p class="modal-body">
+        This backup is protected. Enter <strong>its</strong> password to import.
+      </p>
+      <input
+        bind:this={importPwEl}
+        bind:value={importPw}
+        class="pw-input"
+        type="password"
+        placeholder="Backup password"
+        autocomplete="off"
+        onkeydown={(e) => {
+          if (e.key === "Enter") submitImportPassword();
+        }}
+      />
+      {#if importPwError}
+        <p class="pw-error">{importPwError}</p>
+      {/if}
+      <div class="modal-actions">
+        <button class="ghost" onclick={cancelImport}>Cancel</button>
+        <button
+          class="primary-btn"
+          disabled={!importPw || importBusy}
+          onclick={submitImportPassword}>Import</button
+        >
+      </div>
+    </div>
+  </div>
+{/if}
+
+{#if toast}
+  <div class="toast" role="status">{toast}</div>
+{/if}
+
 <style>
   :global(html),
   :global(body) {
@@ -259,8 +399,18 @@
     padding: 9px 11px;
     gap: 10px;
   }
-  .srow.disabled {
-    opacity: 0.62;
+  /* Divider between stacked rows in a card (e.g. the two Backup rows). */
+  .srow + .srow {
+    border-top: 1px solid #2a2d33;
+  }
+  .chev {
+    color: #777b82;
+    font-size: 13px;
+    flex-shrink: 0;
+  }
+  .srow-btn:disabled {
+    opacity: 0.55;
+    cursor: default;
   }
   /* Encryption row is a full-width button into /settings/password. */
   .srow-btn {
@@ -301,13 +451,14 @@
     font-size: 11px;
     color: #8b8f96;
   }
-  .soon-tag {
-    font-size: 10px;
+  .caveat {
+    font-size: 11px;
     color: #8b8f96;
-    background: #34373d;
-    padding: 3px 7px;
-    border-radius: 10px;
-    white-space: nowrap;
+    line-height: 1.45;
+    margin: 6px 2px 0;
+  }
+  .caveat strong {
+    color: #cfd3da;
   }
 
   /* Manage rows (Accounts) */
@@ -450,5 +601,57 @@
   }
   .danger-btn:hover {
     background: #c93b38;
+  }
+  .primary-btn {
+    flex: 1;
+    border: none;
+    border-radius: 7px;
+    font-size: 13px;
+    padding: 9px;
+    cursor: pointer;
+    background: #5b8cff;
+    color: #fff;
+  }
+  .primary-btn:hover:not(:disabled) {
+    background: #6f9bff;
+  }
+  .primary-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
+  }
+
+  /* Encrypted-import password prompt */
+  .pw-input {
+    box-sizing: border-box;
+    width: 100%;
+    background: #1b1d21;
+    border: 1px solid #5b8cff;
+    border-radius: 6px;
+    color: #e6e7e9;
+    padding: 8px 9px;
+    font-size: 13px;
+    outline: none;
+    margin: 4px 0 8px;
+  }
+  .pw-error {
+    color: #ff8a8f;
+    font-size: 11px;
+    margin: 0 0 10px;
+  }
+
+  /* One-tap import result toast */
+  .toast {
+    position: fixed;
+    left: 50%;
+    bottom: 16px;
+    transform: translateX(-50%);
+    max-width: 88%;
+    background: #34373d;
+    color: #e6e7e9;
+    font-size: 12px;
+    padding: 9px 14px;
+    border-radius: 8px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    text-align: center;
   }
 </style>
