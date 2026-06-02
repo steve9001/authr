@@ -138,57 +138,19 @@
 </main>
 
 <style>
-  :global(html),
-  :global(body) {
-    margin: 0;
-    height: 100%;
-    background: #1b1d21;
-    color: #e6e7e9;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  :global(body) {
-    overflow-y: auto;
-  }
-
+  /* Shell, header, fields + buttons come from app.css; the file card, the encrypted/plain
+     state chip, the explanation, and the plaintext opt-in are unique to E6. */
   main {
-    box-sizing: border-box;
-    padding: 8px 10px 16px;
     display: flex;
     flex-direction: column;
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 10px;
-  }
-  .back {
-    width: 28px;
-    height: 28px;
-    background: #34373d;
-    border: none;
-    border-radius: 6px;
-    color: #c7c9cd;
-    font-size: 15px;
-    cursor: pointer;
-  }
-  .back:hover {
-    background: #3e424a;
-  }
-  h1 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0;
   }
 
   .file-card {
     display: flex;
     align-items: center;
     gap: 10px;
-    background: #232529;
-    border-radius: 8px;
+    background: var(--surface);
+    border-radius: var(--radius-md);
     padding: 11px;
   }
   .file-icon {
@@ -203,57 +165,34 @@
   }
   .file-name {
     font-size: 13px;
-    font-family: "SF Mono", ui-monospace, "Menlo", monospace;
-    color: #e6e7e9;
+    font-family: var(--font-mono);
+    color: var(--text);
   }
   .file-sub {
     font-size: 11px;
-    color: #8b8f96;
+    color: var(--text-dim);
   }
   .state-tag {
     font-size: 10px;
-    color: #8b8f96;
-    background: #34373d;
+    color: var(--text-dim);
+    background: var(--control);
     padding: 3px 8px;
     border-radius: 10px;
     white-space: nowrap;
   }
   .state-tag.on {
-    color: #4ec98a;
-    background: #1f3a2c;
+    color: var(--ok);
+    background: var(--ok-bg);
   }
 
   .explain {
     font-size: 12px;
-    color: #8b8f96;
+    color: var(--text-dim);
     line-height: 1.45;
     margin: 12px 2px 4px;
   }
   .explain strong {
-    color: #cfd3da;
-  }
-
-  .field-label {
-    font-size: 11px;
-    color: #8b8f96;
-    margin: 10px 2px 4px;
-  }
-  .text {
-    box-sizing: border-box;
-    width: 100%;
-    background: #34373d;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    color: #e6e7e9;
-    padding: 8px 9px;
-    font-size: 13px;
-    outline: none;
-  }
-  .text:focus {
-    border-color: #5b8cff;
-  }
-  .text::placeholder {
-    color: #777b82;
+    color: var(--text-soft);
   }
 
   .plain-confirm {
@@ -262,7 +201,7 @@
     gap: 8px;
     margin: 12px 2px 2px;
     font-size: 12px;
-    color: #b6bac1;
+    color: var(--text-modal);
     line-height: 1.4;
     cursor: pointer;
   }
@@ -270,45 +209,6 @@
     margin-top: 1px;
   }
   .plain-confirm strong {
-    color: #ffd479;
-  }
-
-  .error {
-    font-size: 12px;
-    color: #ff8a8f;
-    margin: 10px 2px 0;
-  }
-
-  .primary {
-    margin-top: 16px;
-    background: #5b8cff;
-    border: none;
-    border-radius: 8px;
-    color: #fff;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 11px;
-    cursor: pointer;
-  }
-  .primary:hover:not(:disabled) {
-    background: #6f9bff;
-  }
-  .primary:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-  .cancel {
-    margin-top: 8px;
-    background: transparent;
-    border: none;
-    border-radius: 8px;
-    color: #9aa0a8;
-    font-size: 13px;
-    padding: 9px;
-    cursor: pointer;
-  }
-  .cancel:hover {
-    background: #2a2d33;
-    color: #e6e7e9;
+    color: var(--warn-strong);
   }
 </style>

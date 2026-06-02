@@ -394,14 +394,14 @@ pub fn run() {
             let quit = MenuItem::with_id(app, QUIT_MENU_ID, "Quit Authr", true, None::<&str>)?;
             let menu = Menu::with_items(app, &[&quit])?;
 
-            // Reuse the bundle icon as a template glyph for now; a dedicated monochrome
-            // menu-bar glyph is Phase 6 (UNIFIED_PLAN §7 risk).
-            let icon = app
-                .default_window_icon()
-                .cloned()
-                .expect("bundle ships a default window icon");
+            // A dedicated monochrome template glyph for the menu bar (UNIFIED_PLAN §7 risk /
+            // Phase 6): the brand's two-ring mark as a transparent silhouette, so macOS renders
+            // it crisp and theme-aware. The full-color `icon.png`/`.icns` stays the app/bundle
+            // icon; only the tray uses this glyph. Embedded at compile time via `include_image!`
+            // (path is relative to the crate manifest dir).
+            let tray_glyph = tauri::include_image!("icons/tray-template.png");
             TrayIconBuilder::with_id("main-tray")
-                .icon(icon)
+                .icon(tray_glyph)
                 .icon_as_template(true)
                 .tooltip("Authr")
                 .menu(&menu)

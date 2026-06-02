@@ -65,18 +65,9 @@
 </main>
 
 <style>
-  :global(html),
-  :global(body) {
-    margin: 0;
-    height: 100%;
-    background: #1b1d21;
-    color: #e6e7e9;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-
+  /* The unlock gate is centered full-height — it overrides the shared <main> padding and
+     centers the field/button column; fields + .primary otherwise inherit app.css. */
   main {
-    box-sizing: border-box;
     height: 100vh;
     padding: 0 22px;
     display: flex;
@@ -92,57 +83,25 @@
   }
   h1 {
     font-size: 16px;
-    font-weight: 600;
     margin: 0 0 4px;
   }
   .sub {
     font-size: 12px;
-    color: #8b8f96;
+    color: var(--text-dim);
     margin: 0 0 16px;
     line-height: 1.4;
   }
 
+  /* Centered field + full-width button — the only deltas from the shared primitives. */
   .text {
-    box-sizing: border-box;
-    width: 100%;
-    background: #34373d;
-    border: 1px solid transparent;
-    border-radius: 6px;
-    color: #e6e7e9;
     padding: 9px 10px;
-    font-size: 13px;
-    outline: none;
     text-align: center;
   }
-  .text:focus {
-    border-color: #5b8cff;
-  }
-  .text::placeholder {
-    color: #777b82;
-  }
   .error {
-    font-size: 12px;
-    color: #ff8a8f;
     margin: 10px 0 0;
   }
-
   .primary {
     width: 100%;
     margin-top: 14px;
-    background: #5b8cff;
-    border: none;
-    border-radius: 8px;
-    color: #fff;
-    font-size: 14px;
-    font-weight: 600;
-    padding: 11px;
-    cursor: pointer;
-  }
-  .primary:hover:not(:disabled) {
-    background: #6f9bff;
-  }
-  .primary:disabled {
-    opacity: 0.5;
-    cursor: default;
   }
 </style>

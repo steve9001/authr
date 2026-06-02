@@ -79,7 +79,8 @@
       await writeText(c.code);
       copiedName = c.name;
       clearTimeout(copyTimer);
-      copyTimer = setTimeout(() => (copiedName = null), 1000);
+      // Long enough to read the "✓ copied!" confirmation, short enough to feel snappy.
+      copyTimer = setTimeout(() => (copiedName = null), 1200);
     } catch (e) {
       console.error("clipboard write failed", e);
     }
@@ -131,13 +132,16 @@
 </script>
 
 <main>
-  <!-- Countdown bar — single global timer for when all codes roll. -->
-  <div class="countdown">
-    <div class="track">
-      <div class="fill" style="width: {fraction * 100}%"></div>
+  <!-- Countdown bar — single global timer for when all codes roll. Hidden when there are no
+       accounts (a countdown to nothing reads oddly); the empty state below carries the screen. -->
+  {#if codes.length > 0}
+    <div class="countdown">
+      <div class="track">
+        <div class="fill" style="width: {fraction * 100}%"></div>
+      </div>
+      <span class="secs">{secondsLeft}s</span>
     </div>
-    <span class="secs">{secondsLeft}s</span>
-  </div>
+  {/if}
 
   <!-- Search + gear bar. -->
   <div class="searchbar">
@@ -178,23 +182,13 @@
 </main>
 
 <style>
-  :global(html),
-  :global(body) {
-    margin: 0;
-    height: 100%;
-    background: #1b1d21;
-    color: #e6e7e9;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-    overflow: hidden;
-  }
-
+  /* The popover is a fixed-height panel: <main> fills the viewport and the list scrolls
+     inside it, so the countdown + search bar stay pinned and the body never overflows. */
   main {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    padding: 8px 10px;
-    box-sizing: border-box;
+    padding: var(--pad-y) var(--pad-x);
     gap: 8px;
   }
 
@@ -208,19 +202,19 @@
     flex: 1;
     height: 4px;
     border-radius: 2px;
-    background: #34373d;
+    background: var(--control);
     overflow: hidden;
   }
   .fill {
     height: 100%;
-    background: #5b8cff;
+    background: var(--accent);
     border-radius: 2px;
     transition: width 0.25s linear;
   }
   .secs {
     font-variant-numeric: tabular-nums;
     font-size: 11px;
-    color: #8b8f96;
+    color: var(--text-dim);
     min-width: 26px;
     text-align: right;
   }
@@ -233,31 +227,31 @@
   .search {
     flex: 1;
     min-width: 0;
-    background: #34373d;
+    background: var(--control);
     border: 1px solid transparent;
-    border-radius: 6px;
-    color: #e6e7e9;
+    border-radius: var(--radius-sm);
+    color: var(--text);
     padding: 6px 9px;
     font-size: 13px;
     outline: none;
   }
   .search:focus {
-    border-color: #5b8cff;
+    border-color: var(--accent);
   }
   .search::placeholder {
-    color: #777b82;
+    color: var(--text-faint);
   }
   .gear {
     width: 32px;
-    background: #34373d;
+    background: var(--control);
     border: none;
-    border-radius: 6px;
-    color: #c7c9cd;
+    border-radius: var(--radius-sm);
+    color: var(--text-oncontrol);
     font-size: 15px;
     cursor: pointer;
   }
   .gear:hover {
-    background: #3e424a;
+    background: var(--control-hover);
   }
 
   /* Account list */
@@ -275,7 +269,7 @@
     width: 100%;
     background: transparent;
     border: none;
-    border-radius: 6px;
+    border-radius: var(--radius-sm);
     padding: 9px 10px;
     color: inherit;
     font: inherit;
@@ -283,10 +277,10 @@
     cursor: pointer;
   }
   .row:hover {
-    background: #2a2d33;
+    background: var(--hover);
   }
   .row:active {
-    background: #34373d;
+    background: var(--control);
   }
   .name {
     font-size: 13px;
@@ -296,20 +290,20 @@
     margin-right: 10px;
   }
   .code {
-    font-family: "SF Mono", ui-monospace, "Menlo", monospace;
+    font-family: var(--font-mono);
     font-size: 15px;
     letter-spacing: 0.06em;
-    color: #f3f4f6;
+    color: var(--text-strong);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .copied {
     font-size: 13px;
-    color: #4ec98a;
+    color: var(--ok);
     white-space: nowrap;
   }
   .empty {
-    color: #777b82;
+    color: var(--text-faint);
     font-size: 13px;
     text-align: center;
     margin-top: 24px;

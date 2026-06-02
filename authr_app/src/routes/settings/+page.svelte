@@ -335,59 +335,10 @@
 {/if}
 
 <style>
-  :global(html),
-  :global(body) {
-    margin: 0;
-    height: 100%;
-    background: #1b1d21;
-    color: #e6e7e9;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  :global(body) {
-    overflow-y: auto;
-  }
-
-  main {
-    box-sizing: border-box;
-    padding: 8px 10px 16px;
-  }
-
-  header {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    margin-bottom: 6px;
-  }
-  .back {
-    width: 28px;
-    height: 28px;
-    background: #34373d;
-    border: none;
-    border-radius: 6px;
-    color: #c7c9cd;
-    font-size: 15px;
-    cursor: pointer;
-  }
-  .back:hover {
-    background: #3e424a;
-  }
-  h1 {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0;
-  }
-
-  .section {
-    font-size: 10px;
-    letter-spacing: 0.08em;
-    color: #777b82;
-    margin: 14px 2px 5px;
-  }
-
+  /* Shell, header, and the section label come from app.css. */
   .card {
-    background: #232529;
-    border-radius: 8px;
+    background: var(--surface);
+    border-radius: var(--radius-md);
     overflow: hidden;
   }
 
@@ -401,10 +352,10 @@
   }
   /* Divider between stacked rows in a card (e.g. the two Backup rows). */
   .srow + .srow {
-    border-top: 1px solid #2a2d33;
+    border-top: 1px solid var(--divider);
   }
   .chev {
-    color: #777b82;
+    color: var(--text-faint);
     font-size: 13px;
     flex-shrink: 0;
   }
@@ -423,19 +374,19 @@
     font: inherit;
   }
   .srow-btn:hover {
-    background: #2a2d33;
+    background: var(--hover);
   }
   .state-tag {
     font-size: 10px;
-    color: #8b8f96;
-    background: #34373d;
+    color: var(--text-dim);
+    background: var(--control);
     padding: 3px 8px;
     border-radius: 10px;
     white-space: nowrap;
   }
   .state-tag.on {
-    color: #4ec98a;
-    background: #1f3a2c;
+    color: var(--ok);
+    background: var(--ok-bg);
   }
   .srow-text {
     display: flex;
@@ -445,20 +396,20 @@
   }
   .srow-title {
     font-size: 13px;
-    color: #e6e7e9;
+    color: var(--text);
   }
   .srow-sub {
     font-size: 11px;
-    color: #8b8f96;
+    color: var(--text-dim);
   }
   .caveat {
     font-size: 11px;
-    color: #8b8f96;
+    color: var(--text-dim);
     line-height: 1.45;
     margin: 6px 2px 0;
   }
   .caveat strong {
-    color: #cfd3da;
+    color: var(--text-soft);
   }
 
   /* Manage rows (Accounts) */
@@ -468,13 +419,13 @@
     justify-content: space-between;
     padding: 8px 11px;
     min-height: 20px;
-    border-top: 1px solid #2a2d33;
+    border-top: 1px solid var(--divider);
   }
   .mrow:first-child {
     border-top: none;
   }
   .empty-row {
-    color: #777b82;
+    color: var(--text-faint);
     font-size: 13px;
     justify-content: flex-start;
   }
@@ -496,31 +447,31 @@
     background: transparent;
     border: none;
     border-radius: 5px;
-    color: #9aa0a8;
+    color: var(--text-muted);
     font-size: 14px;
     cursor: pointer;
   }
   .icon:hover {
-    background: #34373d;
-    color: #e6e7e9;
+    background: var(--control);
+    color: var(--text);
   }
   .icon.danger:hover {
-    background: #4a2426;
-    color: #ff8a8f;
+    background: var(--danger-soft-bg);
+    color: var(--danger-text);
   }
   .rename-input {
     flex: 1;
     min-width: 0;
-    background: #1b1d21;
-    border: 1px solid #5b8cff;
+    background: var(--field-bg);
+    border: 1px solid var(--accent);
     border-radius: 5px;
-    color: #e6e7e9;
+    color: var(--text);
     padding: 5px 8px;
     font-size: 13px;
     outline: none;
   }
   .rename-error {
-    color: #ff8a8f;
+    color: var(--danger-text);
     font-size: 11px;
     margin: 2px 11px 6px;
   }
@@ -528,35 +479,35 @@
   .add {
     width: 100%;
     margin-top: 10px;
-    background: #34373d;
+    background: var(--control);
     border: none;
-    border-radius: 8px;
-    color: #cfd3da;
+    border-radius: var(--radius-md);
+    color: var(--text-soft);
     font-size: 13px;
     padding: 10px;
     cursor: pointer;
   }
   .add:hover {
-    background: #3e424a;
+    background: var(--control-hover);
   }
 
   /* Delete-confirm modal */
   .overlay {
     position: fixed;
     inset: 0;
-    background: rgba(10, 11, 13, 0.62);
+    background: var(--scrim);
     display: flex;
     align-items: center;
     justify-content: center;
     padding: 18px;
   }
   .modal {
-    background: #26282d;
-    border-radius: 12px;
+    background: var(--surface-raised);
+    border-radius: var(--radius-lg);
     padding: 16px 16px 14px;
     max-width: 300px;
     text-align: center;
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.5);
+    box-shadow: var(--shadow-modal);
   }
   .warn {
     font-size: 22px;
@@ -568,12 +519,12 @@
   }
   .modal-body {
     font-size: 12px;
-    color: #b6bac1;
+    color: var(--text-modal);
     line-height: 1.45;
     margin: 0 0 14px;
   }
   .modal-body strong {
-    color: #e6e7e9;
+    color: var(--text);
   }
   .modal-actions {
     display: flex;
@@ -589,18 +540,18 @@
     cursor: pointer;
   }
   .ghost {
-    background: #34373d;
-    color: #cfd3da;
+    background: var(--control);
+    color: var(--text-soft);
   }
   .ghost:hover {
-    background: #3e424a;
+    background: var(--control-hover);
   }
   .danger-btn {
-    background: #b3322f;
+    background: var(--danger);
     color: #fff;
   }
   .danger-btn:hover {
-    background: #c93b38;
+    background: var(--danger-hover);
   }
   .primary-btn {
     flex: 1;
@@ -609,11 +560,11 @@
     font-size: 13px;
     padding: 9px;
     cursor: pointer;
-    background: #5b8cff;
+    background: var(--accent);
     color: #fff;
   }
   .primary-btn:hover:not(:disabled) {
-    background: #6f9bff;
+    background: var(--accent-hover);
   }
   .primary-btn:disabled {
     opacity: 0.5;
@@ -624,17 +575,17 @@
   .pw-input {
     box-sizing: border-box;
     width: 100%;
-    background: #1b1d21;
-    border: 1px solid #5b8cff;
-    border-radius: 6px;
-    color: #e6e7e9;
+    background: var(--field-bg);
+    border: 1px solid var(--accent);
+    border-radius: var(--radius-sm);
+    color: var(--text);
     padding: 8px 9px;
     font-size: 13px;
     outline: none;
     margin: 4px 0 8px;
   }
   .pw-error {
-    color: #ff8a8f;
+    color: var(--danger-text);
     font-size: 11px;
     margin: 0 0 10px;
   }
@@ -646,12 +597,12 @@
     bottom: 16px;
     transform: translateX(-50%);
     max-width: 88%;
-    background: #34373d;
-    color: #e6e7e9;
+    background: var(--control);
+    color: var(--text);
     font-size: 12px;
     padding: 9px 14px;
-    border-radius: 8px;
-    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+    border-radius: var(--radius-md);
+    box-shadow: var(--shadow-toast);
     text-align: center;
   }
 </style>
