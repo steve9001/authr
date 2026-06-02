@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { getCurrentWindow } from "@tauri-apps/api/window";
@@ -19,6 +19,7 @@
   let copiedName = $state<string | null>(null);
   let locked = $state(false);
   let searchEl: HTMLInputElement | undefined;
+  let mainEl: HTMLElement | undefined;
   let copyTimer: ReturnType<typeof setTimeout> | undefined;
 
   // The unlock gate (UNIFIED_PLAN §3.4): if the store is encrypted+locked, divert to /unlock
@@ -48,6 +49,31 @@
       codes = [];
     }
   }
+
+  // Content-size the popover (UNIFIED tray-appearance §2): measure the natural content height
+  // and ask Rust to resize + re-anchor under the tray. Measure rather than compute so it stays
+  // correct as the name font / row height change. `main` is pinned to 100vh, so its scrollHeight
+  // reads the viewport, not the content — instead sum the fixed chrome (everything above the
+  // list) with the list's *unclipped* scrollHeight, which is robust at any current window size.
+  async function fitWindow() {
+    await tick(); // let the DOM reflect the current codes
+    if (!mainEl) return;
+    const listEl = mainEl.querySelector<HTMLElement>(".list");
+    const chrome = mainEl.scrollHeight - (listEl?.clientHeight ?? 0);
+    const desired = Math.ceil(chrome + (listEl?.scrollHeight ?? 0));
+    try {
+      await invoke("resize_main", { height: desired });
+    } catch (e) {
+      console.error("resize_main failed", e);
+    }
+  }
+
+  // Reflow the window when the account count changes (add / import / delete). Keyed on the full
+  // list length, NOT the filtered view — typing in search must not resize on every keystroke.
+  $effect(() => {
+    codes.length; // track
+    fitWindow();
+  });
 
   // Substring filter on name (+issuer), case-insensitive — immediate, no debounce.
   const filtered = $derived.by(() => {
@@ -88,10 +114,11 @@
 
   onMount(() => {
     // Gate on the lock state first; only load codes if the store is open.
-    gateIfLocked().then((diverted) => {
+    gateIfLocked().then(async (diverted) => {
       if (!diverted) {
-        refresh();
+        await refresh();
         searchEl?.focus();
+        fitWindow();
       }
     });
 
@@ -108,10 +135,11 @@
     const win = getCurrentWindow();
     const unlisten = win.onFocusChanged(({ payload: focused }) => {
       if (focused) {
-        gateIfLocked().then((diverted) => {
+        gateIfLocked().then(async (diverted) => {
           if (!diverted) {
-            refresh();
+            await refresh();
             searchEl?.focus();
+            fitWindow();
           }
         });
       }
@@ -131,7 +159,7 @@
   });
 </script>
 
-<main>
+<main bind:this={mainEl}>
   <!-- Countdown bar — single global timer for when all codes roll. Hidden when there are no
        accounts (a countdown to nothing reads oddly); the empty state below carries the screen. -->
   {#if codes.length > 0}
@@ -283,7 +311,7 @@
     background: var(--control);
   }
   .name {
-    font-size: 13px;
+    font-size: 15px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;

@@ -23,6 +23,13 @@ pub fn validate_secret(secret: &str) -> Result<(), AccountError> {
     Ok(())
 }
 
+/// Sort accounts alphabetically by name, case-insensitively, in place. Applied whenever the
+/// store grows (or a name changes) so the persisted JSON — and the popover list — stay
+/// alphabetized. Stable, so two names that differ only by case keep their relative order.
+pub fn sort_accounts(accounts: &mut [Account]) {
+    accounts.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+}
+
 /// Add a validated, name-unique account to `accounts`, returning the created account.
 ///
 /// Validates the secret by generating a code and rejects a name that already exists —
@@ -42,6 +49,7 @@ pub fn add_account(
         return Err(AccountError::Duplicate(name));
     }
     accounts.push(account.clone());
+    sort_accounts(accounts);
     Ok(account)
 }
 
@@ -67,6 +75,7 @@ pub fn rename_account(
         return Err(AccountError::Duplicate(new_name));
     }
     accounts[idx].name = new_name;
+    sort_accounts(accounts);
     Ok(())
 }
 
@@ -135,6 +144,7 @@ pub fn merge_accounts(existing: &mut Vec<Account>, imported: Vec<Account>) -> Im
             summary.added += 1;
         }
     }
+    sort_accounts(existing);
     summary
 }
 
@@ -166,6 +176,17 @@ mod tests {
         .unwrap();
         assert_eq!(added.name, "alice");
         assert_eq!(accounts.len(), 1);
+    }
+
+    // Adding out of order leaves the store alphabetized (case-insensitive) by name.
+    #[test]
+    fn add_account_keeps_store_alphabetized() {
+        let mut accounts = Vec::new();
+        add_account(&mut accounts, "charlie".to_string(), "JBSWY3DPEHPK3PXP".to_string()).unwrap();
+        add_account(&mut accounts, "Alice".to_string(), "GEZDGNBVGY3TQOJQ".to_string()).unwrap();
+        add_account(&mut accounts, "bob".to_string(), "JBSWY3DPEHPK3PXP".to_string()).unwrap();
+        let names: Vec<_> = accounts.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["Alice", "bob", "charlie"]);
     }
 
     #[test]
@@ -284,6 +305,19 @@ mod tests {
         assert_eq!(existing[1].name, "bob");
     }
 
+    // An interleaved import lands alphabetized alongside the existing accounts.
+    #[test]
+    fn merge_result_is_alphabetized() {
+        let mut existing = vec![acct("delta", SECRET_A)];
+        let summary = merge_accounts(
+            &mut existing,
+            vec![acct("alpha", SECRET_B), acct("charlie", SECRET_C)],
+        );
+        assert_eq!(summary, ImportSummary { added: 2, skipped: 0, relabeled: 0 });
+        let names: Vec<_> = existing.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(names, vec!["alpha", "charlie", "delta"]);
+    }
+
     // secret already present (even under a different local name) → skipped, local name wins.
     #[test]
     fn merge_skips_present_secret_and_keeps_local_name() {
@@ -313,7 +347,11 @@ mod tests {
         let mut existing = vec![acct("work", SECRET_A), acct("work (imported)", SECRET_B)];
         let summary = merge_accounts(&mut existing, vec![acct("work", SECRET_C)]);
         assert_eq!(summary.relabeled, 1);
-        assert_eq!(existing[2].name, "work (imported 2)");
+        // The store is alphabetized on merge, so assert by identity, not position: the third
+        // "work" lands under the numbered label, carrying its own secret.
+        assert!(existing
+            .iter()
+            .any(|a| a.name == "work (imported 2)" && a.secret == SECRET_C));
     }
 
     // Idempotent: re-importing the same file is a pure no-op (everything skipped).

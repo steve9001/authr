@@ -16,7 +16,7 @@ use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
     tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent},
-    ActivationPolicy, Manager, State, WindowEvent,
+    ActivationPolicy, LogicalSize, Manager, State, WindowEvent,
 };
 use tauri_plugin_positioner::{Position, WindowExt};
 
@@ -349,6 +349,29 @@ fn import_backup(
     import_backup_impl(&*store, &src_path, password)
 }
 
+/// Min/max logical heights for the content-sized popover. Min keeps the empty/loading
+/// state from being a sliver; max caps a long list (it then scrolls internally).
+const MIN_POPOVER_HEIGHT: f64 = 120.0;
+const MAX_POPOVER_HEIGHT: f64 = 568.0; // the old fixed height, now the ceiling
+
+/// Resize the popover to fit its content (width stays fixed at the configured 344) and
+/// re-anchor under the tray. Called from the webview after it measures the rendered list
+/// height. Not capability-gated — like the other `generate_handler!` commands, and the
+/// Rust-side `set_size` is not gated either (capabilities gate only webview IPC).
+#[tauri::command]
+fn resize_main(app: tauri::AppHandle, height: f64) -> Result<(), String> {
+    let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
+        return Ok(());
+    };
+    let h = height.clamp(MIN_POPOVER_HEIGHT, MAX_POPOVER_HEIGHT);
+    window
+        .set_size(LogicalSize::new(344.0, h))
+        .map_err(|e| e.to_string())?;
+    // Keep the panel glued to the tray icon after the height change.
+    let _ = window.move_window(Position::TrayCenter);
+    Ok(())
+}
+
 /// Toggle the popover: visible → hide; hidden → anchor under the tray icon, show, focus.
 fn toggle_main_window(app: &tauri::AppHandle) {
     let Some(window) = app.get_webview_window(MAIN_WINDOW) else {
@@ -382,7 +405,8 @@ pub fn run() {
             change_password,
             unlock,
             export_backup,
-            import_backup
+            import_backup,
+            resize_main
         ])
         .setup(|app| {
             // Hide from the Dock / app menu at runtime too (belt-and-suspenders with
