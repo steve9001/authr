@@ -15,6 +15,10 @@ vi.mock("@tauri-apps/plugin-dialog", async () => ({
   save: (await import("../../test/backend-mock")).save,
   open: (await import("../../test/backend-mock")).open,
 }));
+vi.mock("@tauri-apps/api/path", async () => {
+  const m = await import("../../test/backend-mock");
+  return { downloadDir: m.downloadDir, homeDir: m.homeDir, join: m.join };
+});
 vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
 import { invoke, open, setAccounts, setImport } from "../../test/backend-mock";
@@ -43,7 +47,12 @@ describe("Import accounts (D11)", () => {
     await waitFor(() =>
       expect(screen.getByRole("status")).toHaveTextContent("Imported 9 new accounts"),
     );
-    expect(open).toHaveBeenCalled();
+    // Anchored in Downloads, and the focus-loss auto-hide is suspended then resumed.
+    expect(open).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: "/Users/test/Downloads" }),
+    );
+    expect(invoke).toHaveBeenCalledWith("set_dialog_open", { open: true });
+    expect(invoke).toHaveBeenCalledWith("set_dialog_open", { open: false });
     expect(invoke).toHaveBeenCalledWith("import_backup", {
       srcPath: "/tmp/import.authr",
       password: null,
@@ -106,6 +115,8 @@ describe("Import accounts (D11)", () => {
     await fireEvent.click(screen.getByRole("button", { name: /Import accounts/ }));
 
     await waitFor(() => expect(open).toHaveBeenCalled());
+    // The guard is cleared even on cancel (the `finally`), so the popover keeps auto-hiding.
+    expect(invoke).toHaveBeenCalledWith("set_dialog_open", { open: false });
     expect(invoke).not.toHaveBeenCalledWith("import_backup", expect.anything());
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });

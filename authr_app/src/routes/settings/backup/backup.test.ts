@@ -15,10 +15,20 @@ vi.mock("@tauri-apps/plugin-dialog", async () => ({
   save: (await import("../../../test/backend-mock")).save,
   open: (await import("../../../test/backend-mock")).open,
 }));
+vi.mock("@tauri-apps/api/path", async () => {
+  const m = await import("../../../test/backend-mock");
+  return { downloadDir: m.downloadDir, homeDir: m.homeDir, join: m.join };
+});
 vi.mock("$app/navigation", () => ({ goto: vi.fn() }));
 
 import { goto } from "$app/navigation";
-import { invoke, save, setAccounts } from "../../../test/backend-mock";
+import {
+  invoke,
+  save,
+  downloadDir,
+  homeDir,
+  setAccounts,
+} from "../../../test/backend-mock";
 import BackupPage from "./+page.svelte";
 
 beforeEach(() => {
@@ -41,11 +51,36 @@ describe("Backup screen (E6 / D6)", () => {
     );
 
     await waitFor(() => expect(goto).toHaveBeenCalledWith("/settings"));
-    expect(save).toHaveBeenCalled();
+    // The picker is anchored in Downloads with the filename prefilled.
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({
+        defaultPath: "/Users/test/Downloads/authr-vault.authr",
+      }),
+    );
+    // The focus-loss auto-hide is suspended for the picker, then resumed.
+    expect(invoke).toHaveBeenCalledWith("set_dialog_open", { open: true });
+    expect(invoke).toHaveBeenCalledWith("set_dialog_open", { open: false });
     expect(invoke).toHaveBeenCalledWith("export_backup", {
       destPath: "/tmp/authr-vault.authr",
       password: "copy-pw",
     });
+  });
+
+  // Downloads can't be resolved on every system → fall back to the home dir.
+  it("anchors the picker at the home dir when Downloads can't be resolved", async () => {
+    downloadDir.mockRejectedValueOnce(new Error("no Downloads"));
+    render(BackupPage);
+    await typeInto(await screen.findByLabelText("Backup password"), "copy-pw");
+    await typeInto(screen.getByLabelText("Confirm password"), "copy-pw");
+
+    await fireEvent.click(
+      screen.getByRole("button", { name: "Save encrypted backup" }),
+    );
+
+    await waitFor(() => expect(homeDir).toHaveBeenCalled());
+    expect(save).toHaveBeenCalledWith(
+      expect.objectContaining({ defaultPath: "/Users/test/authr-vault.authr" }),
+    );
   });
 
   // Plaintext path: no password ⇒ the button is gated behind the explicit confirmation.
@@ -95,6 +130,9 @@ describe("Backup screen (E6 / D6)", () => {
     );
 
     await waitFor(() => expect(save).toHaveBeenCalled());
+    // The guard is still cleared on the cancel path (the `finally`), so the popover
+    // doesn't get stuck never auto-hiding.
+    expect(invoke).toHaveBeenCalledWith("set_dialog_open", { open: false });
     expect(invoke).not.toHaveBeenCalledWith("export_backup", expect.anything());
     expect(goto).not.toHaveBeenCalled();
   });

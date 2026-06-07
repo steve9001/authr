@@ -2,6 +2,7 @@
   import { onMount } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { save } from "@tauri-apps/plugin-dialog";
+  import { downloadDir, homeDir, join } from "@tauri-apps/api/path";
   import { goto } from "$app/navigation";
 
   // E6 (UNIFIED_PLAN §5, D6): the backup gets its OWN password, independent of the live
@@ -31,16 +32,38 @@
       error = "Passwords don't match";
       return;
     }
-    // Pick a destination via the dialog plugin (user-selected path only).
+    // Anchor the picker at Downloads (the conventional "a file I just exported" spot, one
+    // click from Finder's sidebar) with the filename prefilled, so the user clearly sees
+    // where it starts. Fall back to the home dir if Downloads can't be resolved.
+    let defaultPath: string;
+    try {
+      let baseDir: string;
+      try {
+        baseDir = await downloadDir();
+      } catch {
+        baseDir = await homeDir();
+      }
+      defaultPath = await join(baseDir, FILE_NAME);
+    } catch (e) {
+      error = String(e);
+      return;
+    }
+
+    // Pick a destination via the dialog plugin (user-selected path only). Suspend the
+    // popover's focus-loss auto-hide while the native sheet is in front, then resume it —
+    // otherwise the popover hides on focus loss and tears the sheet down with it.
     let dest: string | null;
+    await invoke("set_dialog_open", { open: true });
     try {
       dest = await save({
-        defaultPath: FILE_NAME,
+        defaultPath,
         filters: [{ name: "Authr backup", extensions: ["authr"] }],
       });
     } catch (e) {
       error = String(e);
       return;
+    } finally {
+      await invoke("set_dialog_open", { open: false });
     }
     if (!dest) return; // cancelled the save dialog
 

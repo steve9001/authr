@@ -2,6 +2,7 @@
   import { onMount, tick } from "svelte";
   import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
+  import { downloadDir, homeDir } from "@tauri-apps/api/path";
   import { goto } from "$app/navigation";
 
   type AccountView = { name: string; issuer: string | null };
@@ -107,10 +108,28 @@
   }
 
   async function startImport() {
-    const picked = await open({
-      multiple: false,
-      filters: [{ name: "Authr backup", extensions: ["authr", "json"] }],
-    });
+    // Anchor the picker at Downloads (where an exported backup is most likely to be),
+    // falling back to the home dir. No filename — it's a file picker, not a save.
+    let defaultPath: string;
+    try {
+      defaultPath = await downloadDir();
+    } catch {
+      defaultPath = await homeDir();
+    }
+
+    // Suspend the popover's focus-loss auto-hide while the native open sheet is in front,
+    // then resume it — otherwise the popover hides and tears the sheet down with it.
+    let picked: string | string[] | null;
+    await invoke("set_dialog_open", { open: true });
+    try {
+      picked = await open({
+        multiple: false,
+        defaultPath,
+        filters: [{ name: "Authr backup", extensions: ["authr", "json"] }],
+      });
+    } finally {
+      await invoke("set_dialog_open", { open: false });
+    }
     if (typeof picked !== "string") return; // cancelled
     await attemptImport(picked, null);
   }

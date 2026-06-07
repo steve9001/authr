@@ -12,6 +12,7 @@ use authr_core::totp;
 use authr_core::vault::{self, AccountStore, SecretString, Session};
 use serde::Serialize;
 use std::fs;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use tauri::{
     menu::{Menu, MenuItem},
@@ -32,6 +33,14 @@ const QUIT_MENU_ID: &str = "quit";
 /// `Session` reads it to (de)crypt the store.
 #[derive(Default)]
 struct VaultSession(Mutex<Option<SecretString>>);
+
+/// Suppresses the focus-loss auto-hide while a native dialog the app itself opened is in
+/// front. The save/open picker steals focus → the popover would see `Focused(false)` and hide
+/// itself, and on macOS a sheet whose parent window hides gets torn down with it (that was the
+/// "dialog that vanished before I could see where the file went"). The webview flips this true
+/// around each `save()`/`open()` call via `set_dialog_open`, so the picker stays on screen.
+#[derive(Default)]
+struct DialogGuard(AtomicBool);
 
 /// `encryption_status()` payload — drives the Settings display and the unlock gate.
 #[derive(Serialize)]
@@ -349,6 +358,15 @@ fn import_backup(
     import_backup_impl(&*store, &src_path, password)
 }
 
+/// Suspend/resume the focus-loss auto-hide around a native file dialog (see [`DialogGuard`]).
+/// The webview wraps each `save()`/`open()` picker with `open: true` then `open: false` (in a
+/// `finally`) so the popover stays put while the picker is in front and resumes auto-hiding
+/// after. Not capability-gated — like the other `generate_handler!` commands.
+#[tauri::command]
+fn set_dialog_open(guard: State<DialogGuard>, open: bool) {
+    guard.0.store(open, Ordering::SeqCst);
+}
+
 /// Min/max logical heights for the content-sized popover. Min keeps the empty/loading
 /// state from being a sliver; max caps a long list (it then scrolls internally).
 const MIN_POPOVER_HEIGHT: f64 = 120.0;
@@ -394,6 +412,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_fs::init())
         .manage(VaultSession::default())
+        .manage(DialogGuard::default())
         .invoke_handler(tauri::generate_handler![
             list_accounts,
             get_codes,
@@ -406,6 +425,7 @@ pub fn run() {
             unlock,
             export_backup,
             import_backup,
+            set_dialog_open,
             resize_main
         ])
         .setup(|app| {
@@ -451,12 +471,17 @@ pub fn run() {
                 .build(app)?;
 
             // Auto-hide the popover when it loses focus — what makes it feel like a native
-            // menu-bar panel rather than a floating window (guide §3.3).
+            // menu-bar panel rather than a floating window (guide §3.3) — UNLESS a native file
+            // dialog the app opened is in front (see [`DialogGuard`]): hiding then would tear
+            // the sheet down before the user could act on it.
             if let Some(window) = app.get_webview_window(MAIN_WINDOW) {
                 let w = window.clone();
+                let handle = app.handle().clone();
                 window.on_window_event(move |event| {
                     if let WindowEvent::Focused(false) = event {
-                        let _ = w.hide();
+                        if !handle.state::<DialogGuard>().0.load(Ordering::SeqCst) {
+                            let _ = w.hide();
+                        }
                     }
                 });
             }

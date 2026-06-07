@@ -148,6 +148,11 @@ export const invoke = vi.fn(
         return null;
       }
 
+      // Focus-loss auto-hide guard around a native file dialog (no-op in the mock; the test
+      // asserts it's flipped true before and false after a picker).
+      case "set_dialog_open":
+        return null;
+
       // --- Phase 5 backup/import commands (UNIFIED_PLAN §3.3, §5) ---
       case "export_backup": {
         lastExport = {
@@ -189,3 +194,10 @@ export const writeText = vi.fn();
 // cancelled dialog.
 export const save = vi.fn(async (): Promise<string | null> => "/tmp/authr-vault.authr");
 export const open = vi.fn(async (): Promise<string | null> => "/tmp/import.authr");
+
+// `@tauri-apps/api/path` — the pickers anchor at a home-relative base dir (Downloads, falling
+// back to home) and prefill the filename. The base-dir resolution is mockable so tests can
+// drive the Downloads-rejects-→-home fallback.
+export const downloadDir = vi.fn(async (): Promise<string> => "/Users/test/Downloads");
+export const homeDir = vi.fn(async (): Promise<string> => "/Users/test");
+export const join = vi.fn(async (...parts: string[]): Promise<string> => parts.join("/"));
