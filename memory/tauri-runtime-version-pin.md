@@ -1,6 +1,6 @@
 ---
 name: tauri-runtime-version-pin
-description: The authr_app Tauri build breaks unless tauri-runtime and tauri-runtime-wry stay on the same version; cargo update can re-introduce the skew.
+description: The authr Tauri build breaks unless tauri-runtime and tauri-runtime-wry stay on the same version; cargo update can re-introduce the skew.
 metadata:
   type: project
 ---
@@ -20,5 +20,5 @@ alignment.
 
 **How to apply:** if `cargo update` makes the Tauri build fail with missing-trait-item or
 non-Send-closure errors in `tauri-runtime-wry`, run
-`cargo tree -p authr_app | grep -E 'tauri-runtime'` and force the two `tauri-runtime*`
+`cargo tree -p authr | grep -E 'tauri-runtime'` and force the two `tauri-runtime*`
 crates onto the same minor: `cargo update -p tauri-runtime --precise 2.10.1`.
