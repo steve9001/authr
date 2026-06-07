@@ -16,6 +16,12 @@
   let curEl = $state<HTMLInputElement | undefined>();
   let nextEl = $state<HTMLInputElement | undefined>();
 
+  // Remove-password flow: `removing` opens the confirm modal; the session is already unlocked
+  // to reach Settings, so no password re-entry is needed.
+  let removing = $state(false);
+  let removeBusy = $state(false);
+  let removeError = $state<string | null>(null);
+
   const canSubmit = $derived(
     !busy &&
       next.length > 0 &&
@@ -59,10 +65,25 @@
     }
   }
 
+  async function removePassword() {
+    removeBusy = true;
+    removeError = null;
+    try {
+      await invoke("disable_password");
+      goto("/settings");
+    } catch (e) {
+      removeError = String(e);
+      removeBusy = false;
+    }
+  }
+
   onMount(() => {
     load();
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") goto("/settings");
+      if (e.key === "Escape") {
+        if (removing) removing = false;
+        else goto("/settings");
+      }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
@@ -134,8 +155,52 @@
       {enabled ? "Update password" : "Set password"}
     </button>
     <button class="cancel" onclick={() => goto("/settings")}>Cancel</button>
+
+    {#if enabled}
+      <!-- Remove password: decrypt and revert to a plaintext store on this device. -->
+      <div class="remove-section">
+        <span class="remove-title">Remove password</span>
+        <span class="remove-sub">
+          Decrypt and store accounts as plain text on this device.
+        </span>
+        <button class="remove-btn" onclick={() => (removing = true)}>
+          Remove password
+        </button>
+      </div>
+    {/if}
   {/if}
 </main>
+
+{#if removing}
+  <!-- Confirm modal — removing encryption leaves accounts unencrypted on disk. -->
+  <div
+    class="overlay"
+    role="presentation"
+    onclick={(e) => {
+      if (e.target === e.currentTarget) removing = false;
+    }}
+  >
+    <div class="modal" role="dialog" aria-modal="true">
+      <div class="warn">⚠</div>
+      <p class="modal-title">Remove password?</p>
+      <p class="modal-body">
+        Your accounts will be saved <strong>unencrypted</strong> on this device.
+        Anyone with access to this computer can read them.
+      </p>
+      {#if removeError}
+        <p class="modal-error">{removeError}</p>
+      {/if}
+      <div class="modal-actions">
+        <button class="ghost" disabled={removeBusy} onclick={() => (removing = false)}>
+          Cancel
+        </button>
+        <button class="danger-btn" disabled={removeBusy} onclick={removePassword}>
+          Remove
+        </button>
+      </div>
+    </div>
+  </div>
+{/if}
 
 <style>
   /* Shell, header, fields + buttons come from app.css; only the unrecoverable-password
@@ -166,5 +231,112 @@
   }
   .warning strong {
     color: var(--warn-strong);
+  }
+
+  /* Remove-password section — a divided danger zone below the change form. */
+  .remove-section {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    margin-top: 18px;
+    padding-top: 16px;
+    border-top: 1px solid var(--divider);
+  }
+  .remove-title {
+    font-size: 13px;
+    color: var(--text);
+  }
+  .remove-sub {
+    font-size: 11px;
+    color: var(--text-dim);
+    line-height: 1.45;
+  }
+  .remove-btn {
+    align-self: flex-start;
+    margin-top: 6px;
+    background: var(--danger-soft-bg);
+    border: none;
+    border-radius: 7px;
+    color: var(--danger-text);
+    font-size: 13px;
+    padding: 8px 14px;
+    cursor: pointer;
+  }
+  .remove-btn:hover {
+    background: var(--danger);
+    color: #fff;
+  }
+
+  /* Confirm modal — mirrors the settings page's overlay/modal pattern. */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: var(--scrim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+  }
+  .modal {
+    background: var(--surface-raised);
+    border-radius: var(--radius-lg);
+    padding: 16px 16px 14px;
+    max-width: 300px;
+    text-align: center;
+    box-shadow: var(--shadow-modal);
+  }
+  .warn {
+    font-size: 22px;
+  }
+  .modal-title {
+    font-size: 14px;
+    font-weight: 600;
+    margin: 4px 0 6px;
+  }
+  .modal-body {
+    font-size: 12px;
+    color: var(--text-modal);
+    line-height: 1.45;
+    margin: 0 0 14px;
+  }
+  .modal-body strong {
+    color: var(--text);
+  }
+  .modal-error {
+    color: var(--danger-text);
+    font-size: 11px;
+    margin: 0 0 12px;
+  }
+  .modal-actions {
+    display: flex;
+    gap: 8px;
+  }
+  .ghost,
+  .danger-btn {
+    flex: 1;
+    border: none;
+    border-radius: 7px;
+    font-size: 13px;
+    padding: 9px;
+    cursor: pointer;
+  }
+  .ghost {
+    background: var(--control);
+    color: var(--text-soft);
+  }
+  .ghost:hover {
+    background: var(--control-hover);
+  }
+  .danger-btn {
+    background: var(--danger);
+    color: #fff;
+  }
+  .danger-btn:hover:not(:disabled) {
+    background: var(--danger-hover);
+  }
+  .ghost:disabled,
+  .danger-btn:disabled {
+    opacity: 0.5;
+    cursor: default;
   }
 </style>

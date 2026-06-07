@@ -174,6 +174,19 @@ fn unlock_impl(storage: &Storage, password: &str) -> Result<SecretString, String
     Ok(SecretString::from(password.to_owned()))
 }
 
+/// `disable_password()` core: remove encryption, restoring the plaintext `accounts.json`.
+/// Requires the held session passphrase (D7) — the store must be unlocked first. Returns `Ok`
+/// once the vault is gone; the command wrapper then clears the cached passphrase.
+fn disable_password_impl(storage: &Storage, held: Option<SecretString>) -> Result<(), String> {
+    if !vault::is_encrypted(storage.dir()) {
+        return Err("Encryption is not enabled".to_string());
+    }
+    let passphrase = held.ok_or("Locked — unlock Authr first")?;
+    Session::resume(Storage::new(storage.dir()), passphrase)
+        .disable()
+        .map_err(|e| e.to_string())
+}
+
 // --- Phase 5 backup/import cores (UNIFIED_PLAN §3.3, §5) ------------------------------------
 
 /// `export_backup` core: load the live accounts through the [`AccountStore`] seam and write a
@@ -328,6 +341,16 @@ fn unlock(
     Ok(())
 }
 
+/// Remove the password: decrypt the vault back to plaintext `accounts.json`, then drop the
+/// held passphrase so the session reverts to the unencrypted state. The store must be unlocked
+/// (the passphrase is held this session) to reach here.
+#[tauri::command]
+fn disable_password(app: tauri::AppHandle, vault: State<VaultSession>) -> Result<(), String> {
+    disable_password_impl(&storage_for(&app)?, held_passphrase(&vault)?)?;
+    *vault.0.lock().map_err(|e| e.to_string())? = None;
+    Ok(())
+}
+
 /// E6 export: write the live accounts to a user-picked `.authr` path. `Some(pw)` encrypts the
 /// backup with its **own** password (D6); `None` writes plaintext JSON (the UI gates this
 /// behind an explicit confirmation). Reads through the session-aware store, so the live vault
@@ -423,6 +446,7 @@ pub fn run() {
             set_password,
             change_password,
             unlock,
+            disable_password,
             export_backup,
             import_backup,
             set_dialog_open,
@@ -702,6 +726,31 @@ mod tests {
         assert_eq!(unlock_impl(&store, "old").unwrap_err(), "Incorrect password");
         let reopened = account_store(Storage::new(dir.path()), Some(pass)).unwrap();
         assert_eq!(list_accounts_impl(&*reopened).unwrap()[0].name, "alice");
+    }
+
+    // disable_password removes encryption: the vault is gone, accounts.json returns with the
+    // data intact, and a held passphrase is required to do it.
+    #[test]
+    fn disable_password_impl_restores_plaintext() {
+        let (dir, store) = store();
+        let pass = set_password_impl(&store, "pw").unwrap();
+        let unlocked = account_store(Storage::new(dir.path()), Some(pass.clone())).unwrap();
+        add_account_impl(&*unlocked, "alice".to_string(), TEST_SECRET.to_string()).unwrap();
+
+        disable_password_impl(&store, Some(pass)).unwrap();
+
+        assert!(!vault::is_encrypted(store.dir()));
+        assert!(store.accounts_path().exists());
+        let names: Vec<_> = store.load().unwrap().into_iter().map(|a| a.name).collect();
+        assert_eq!(names, vec!["alice"]);
+    }
+
+    // disable_password on a plaintext store is rejected (encryption isn't enabled).
+    #[test]
+    fn disable_password_impl_rejects_when_not_enabled() {
+        let (_dir, store) = store();
+        let err = disable_password_impl(&store, None).unwrap_err();
+        assert_eq!(err, "Encryption is not enabled");
     }
 
     // --- Phase 5: backup/import command cores (UNIFIED_PLAN §5, §9.2 extended) --------------

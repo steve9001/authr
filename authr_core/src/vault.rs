@@ -181,6 +181,20 @@ impl Session {
         Ok(())
     }
 
+    /// `disable` (remove password): decrypt the vault and restore the plaintext `accounts.json`,
+    /// then delete the vault. The caller has already proven the passphrase (this session is
+    /// unlocked). Order matters: write the plaintext *first*, delete the vault *last*, so a crash
+    /// mid-way never loses data (worst case both files exist and the vault still wins on launch).
+    pub fn disable(self) -> Result<(), VaultError> {
+        let accounts = self.load_accounts()?; // decrypt in memory
+        self.storage.save(&accounts)?; // write plaintext accounts.json
+        let vault = self.vault_path();
+        if vault.exists() {
+            fs::remove_file(vault)?;
+        }
+        Ok(())
+    }
+
     /// Resume an already-unlocked session from a passphrase held in memory — no I/O, no
     /// verification. The command layer caches the [`SecretString`] across calls (D7) and
     /// rebuilds the session per command with this; the next `load`/`save` does the crypto.
@@ -308,6 +322,25 @@ mod tests {
         ));
         let session = Session::unlock(Storage::new(dir.path()), "new").unwrap();
         assert_eq!(session.load().unwrap()[0].name, "alice");
+    }
+
+    // disable round-trips back to plaintext: accounts.json returns, the vault is gone, data intact.
+    #[test]
+    fn disable_writes_plaintext_and_removes_vault() {
+        let dir = TempDir::new().unwrap();
+        let session = Session::enable(Storage::new(dir.path()), "pw").unwrap();
+        session.save(&[acct("alice"), acct("bob")]).unwrap();
+
+        Session::unlock(Storage::new(dir.path()), "pw")
+            .unwrap()
+            .disable()
+            .unwrap();
+
+        assert!(!is_encrypted(dir.path()), "vault left behind");
+        let storage = Storage::new(dir.path());
+        assert!(storage.accounts_path().exists(), "plaintext file not written");
+        let names: Vec<_> = storage.load().unwrap().into_iter().map(|a| a.name).collect();
+        assert_eq!(names, vec!["alice", "bob"]);
     }
 
     // A fresh (never-saved) directory is not encrypted.
