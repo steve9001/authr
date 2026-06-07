@@ -467,7 +467,7 @@ pub fn run() {
             // it crisp and theme-aware. The full-color `icon.png`/`.icns` stays the app/bundle
             // icon; only the tray uses this glyph. Embedded at compile time via `include_image!`
             // (path is relative to the crate manifest dir).
-            let tray_glyph = tauri::include_image!("icons/tray-template.png");
+            let tray_glyph = tauri::include_image!("icons/tray@2x.png");
             TrayIconBuilder::with_id("main-tray")
                 .icon(tray_glyph)
                 .icon_as_template(true)
