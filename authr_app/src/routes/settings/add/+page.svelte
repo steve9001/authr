@@ -7,6 +7,7 @@
   let secret = $state("");
   let error = $state<string | null>(null);
   let busy = $state(false);
+  let showSecretHelp = $state(false);
   let nameEl: HTMLInputElement | undefined;
 
   const canSubmit = $derived(name.trim().length > 0 && secret.trim().length > 0 && !busy);
@@ -56,7 +57,22 @@
     }}
   />
 
-  <label class="field-label" for="acct-secret">Secret key</label>
+  <div class="label-row">
+    <label class="field-label" for="acct-secret">Secret key</label>
+    <button
+      type="button"
+      class="help-toggle"
+      aria-label="Where do I find this?"
+      aria-expanded={showSecretHelp}
+      onclick={() => (showSecretHelp = !showSecretHelp)}>ⓘ</button>
+  </div>
+  {#if showSecretHelp}
+    <p class="help">
+      Setting up two-factor authentication usually shows a QR code to scan with a phone app. Look
+      for an option near the QR code — often labeled “Can’t scan?”, “Enter code manually”, or “Show
+      secret key” — to reveal the secret as text. Paste that string here.
+    </p>
+  {/if}
   <textarea
     id="acct-secret"
     bind:value={secret}
@@ -67,7 +83,7 @@
     autocomplete="off"
     autocapitalize="off"
   ></textarea>
-  <p class="hint">Plain text for now · spaces ignored</p>
+  <p class="hint">Spaces and capitalization don’t matter</p>
 
   {#if error}
     <p class="error">{error}</p>
@@ -95,5 +111,32 @@
     font-size: 11px;
     color: var(--text-faint);
     margin: 5px 2px 0;
+  }
+  .label-row {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+  .help-toggle {
+    background: none;
+    border: none;
+    padding: 0;
+    cursor: pointer;
+    color: var(--text-faint);
+    font-size: 13px;
+    line-height: 1;
+  }
+  .help-toggle:hover,
+  .help-toggle[aria-expanded="true"] {
+    color: var(--accent);
+  }
+  .help {
+    font-size: 12px;
+    line-height: 1.5;
+    color: var(--text-dim);
+    background: var(--control);
+    border-radius: var(--radius-sm);
+    padding: 9px 10px;
+    margin: 6px 0 0;
   }
 </style>
