@@ -1,0 +1,61 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    authr app / Finder icon — "***" badge in a square squircle.
+    Matches the menu-bar tray glyph (10-asterisks-badge-tray.svg): a rounded-rect
+    outline frame enclosing three asterisks (password-mask motif). Here it's
+    rendered in cool white (#F6F6FF) on the brand indigo->violet squircle.
+
+    The badge reproduces the tray's exact proportions (outer 38.5x26.5 rx7.5,
+    ring ~2.4px, *** at font-size 28 letter-spacing -1.5 in a 42x30 box), scaled
+    ~15.58x and re-centered in the 1024 square. Asterisks sit high in the line,
+    so the baseline is pushed down to center the ink at y=512.
+  -->
+  <defs>
+    <!-- Deep indigo -> violet background -->
+    <linearGradient id="bg" x1="0" y1="0" x2="1024" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#4338CA"/>
+      <stop offset="0.55" stop-color="#4F46E5"/>
+      <stop offset="1" stop-color="#7C3AED"/>
+    </linearGradient>
+
+    <!-- Subtle top highlight for glassy depth -->
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff" stop-opacity="0.16"/>
+      <stop offset="0.45" stop-color="#ffffff" stop-opacity="0.0"/>
+    </linearGradient>
+
+    <!-- macOS Big Sur style squircle (superellipse), ~22.37% corner radius. -->
+    <clipPath id="squircleClip">
+      <path d="M 229 0
+               L 795 0
+               C 940 0 1024 84 1024 229
+               L 1024 795
+               C 1024 940 940 1024 795 1024
+               L 229 1024
+               C 84 1024 0 940 0 795
+               L 0 229
+               C 0 84 84 0 229 0 Z"/>
+    </clipPath>
+
+    <!-- Frame ring: white outer rounded-rect minus inner cut. -->
+    <mask id="frame" maskUnits="userSpaceOnUse" x="0" y="0" width="1024" height="1024">
+      <rect x="0" y="0" width="1024" height="1024" fill="#000"/>
+      <rect x="212" y="305.5" width="600" height="413" rx="117" fill="#fff"/>
+      <rect x="249.4" y="342.9" width="525.2" height="338.2" rx="83" fill="#000"/>
+    </mask>
+  </defs>
+
+  <!-- Background squircle -->
+  <g clip-path="url(#squircleClip)">
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#bg)"/>
+    <rect x="0" y="0" width="1024" height="1024" fill="url(#sheen)"/>
+  </g>
+
+  <!-- White rounded-rect frame -->
+  <rect x="0" y="0" width="1024" height="1024" fill="#F6F6FF" mask="url(#frame)"/>
+
+  <!-- Three asterisks, centered in the frame interior -->
+  <text x="512" y="748.1" text-anchor="middle"
+        font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+        font-weight="700" font-size="436" letter-spacing="-23.4" fill="#F6F6FF">***</text>
+</svg>

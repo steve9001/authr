@@ -1,0 +1,148 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <!-- Squircle background -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1024" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#2C2C2E"/>
+      <stop offset="1" stop-color="#1C1C1E"/>
+    </linearGradient>
+    <!-- Outer ring bezel: turned-metal -->
+    <linearGradient id="bezel" x1="200" y1="200" x2="824" y2="824" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9AA0A6"/>
+      <stop offset="0.45" stop-color="#5B6066"/>
+      <stop offset="0.55" stop-color="#3C4045"/>
+      <stop offset="1" stop-color="#7A8086"/>
+    </linearGradient>
+    <!-- Dial face: brushed steel radial -->
+    <radialGradient id="face" cx="512" cy="470" r="320" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#6E747A"/>
+      <stop offset="0.55" stop-color="#52575C"/>
+      <stop offset="1" stop-color="#33373B"/>
+    </radialGradient>
+    <!-- Inner hub -->
+    <radialGradient id="hub" cx="512" cy="480" r="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#85898E"/>
+      <stop offset="0.6" stop-color="#56595D"/>
+      <stop offset="1" stop-color="#303336"/>
+    </radialGradient>
+    <!-- Soft top highlight on the dial -->
+    <radialGradient id="sheen" cx="512" cy="330" r="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Accent marker gradient (amber) -->
+    <linearGradient id="accent" x1="512" y1="150" x2="512" y2="260" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FBBF24"/>
+      <stop offset="1" stop-color="#F59E0B"/>
+    </linearGradient>
+    <radialGradient id="dropShadow" cx="512" cy="540" r="340" gradientUnits="userSpaceOnUse">
+      <stop offset="0.7" stop-color="#000000" stop-opacity="0.45"/>
+      <stop offset="1" stop-color="#000000" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- macOS squircle background -->
+  <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229" fill="url(#bg)"/>
+
+  <!-- Cast shadow under the dial for depth -->
+  <ellipse cx="512" cy="540" rx="340" ry="340" fill="url(#dropShadow)"/>
+
+  <!-- Outer metal bezel -->
+  <circle cx="512" cy="512" r="338" fill="url(#bezel)"/>
+  <circle cx="512" cy="512" r="338" fill="none" stroke="#000000" stroke-opacity="0.35" stroke-width="2"/>
+
+  <!-- Recessed dial face -->
+  <circle cx="512" cy="512" r="300" fill="url(#face)"/>
+  <circle cx="512" cy="512" r="300" fill="none" stroke="#000000" stroke-opacity="0.5" stroke-width="3"/>
+
+  <!-- Tick marks around the rim -->
+  <g stroke="#D7DBDF" stroke-opacity="0.85" stroke-linecap="round">
+    <line x1="512.0" y1="180.0" x2="512.0" y2="206.0" stroke-width="6"/>
+    <line x1="546.7" y1="181.8" x2="545.2" y2="195.7" stroke-width="3"/>
+    <line x1="581.0" y1="187.3" x2="578.1" y2="200.9" stroke-width="3"/>
+    <line x1="614.6" y1="196.2" x2="610.3" y2="209.6" stroke-width="3"/>
+    <line x1="647.0" y1="208.7" x2="641.3" y2="221.5" stroke-width="3"/>
+    <line x1="678.0" y1="224.5" x2="665.0" y2="247.0" stroke-width="6"/>
+    <line x1="707.1" y1="243.4" x2="698.9" y2="254.7" stroke-width="3"/>
+    <line x1="734.2" y1="265.3" x2="724.8" y2="275.7" stroke-width="3"/>
+    <line x1="758.7" y1="289.8" x2="748.3" y2="299.2" stroke-width="3"/>
+    <line x1="780.6" y1="316.9" x2="769.3" y2="325.1" stroke-width="3"/>
+    <line x1="799.5" y1="346.0" x2="777.0" y2="359.0" stroke-width="6"/>
+    <line x1="815.3" y1="377.0" x2="802.5" y2="382.7" stroke-width="3"/>
+    <line x1="827.8" y1="409.4" x2="814.4" y2="413.7" stroke-width="3"/>
+    <line x1="836.7" y1="443.0" x2="823.1" y2="445.9" stroke-width="3"/>
+    <line x1="842.2" y1="477.3" x2="828.3" y2="478.8" stroke-width="3"/>
+    <line x1="844.0" y1="512.0" x2="818.0" y2="512.0" stroke-width="6"/>
+    <line x1="842.2" y1="546.7" x2="828.3" y2="545.2" stroke-width="3"/>
+    <line x1="836.7" y1="581.0" x2="823.1" y2="578.1" stroke-width="3"/>
+    <line x1="827.8" y1="614.6" x2="814.4" y2="610.3" stroke-width="3"/>
+    <line x1="815.3" y1="647.0" x2="802.5" y2="641.3" stroke-width="3"/>
+    <line x1="799.5" y1="678.0" x2="777.0" y2="665.0" stroke-width="6"/>
+    <line x1="780.6" y1="707.1" x2="769.3" y2="698.9" stroke-width="3"/>
+    <line x1="758.7" y1="734.2" x2="748.3" y2="724.8" stroke-width="3"/>
+    <line x1="734.2" y1="758.7" x2="724.8" y2="748.3" stroke-width="3"/>
+    <line x1="707.1" y1="780.6" x2="698.9" y2="769.3" stroke-width="3"/>
+    <line x1="678.0" y1="799.5" x2="665.0" y2="777.0" stroke-width="6"/>
+    <line x1="647.0" y1="815.3" x2="641.3" y2="802.5" stroke-width="3"/>
+    <line x1="614.6" y1="827.8" x2="610.3" y2="814.4" stroke-width="3"/>
+    <line x1="581.0" y1="836.7" x2="578.1" y2="823.1" stroke-width="3"/>
+    <line x1="546.7" y1="842.2" x2="545.2" y2="828.3" stroke-width="3"/>
+    <line x1="512.0" y1="844.0" x2="512.0" y2="818.0" stroke-width="6"/>
+    <line x1="477.3" y1="842.2" x2="478.8" y2="828.3" stroke-width="3"/>
+    <line x1="443.0" y1="836.7" x2="445.9" y2="823.1" stroke-width="3"/>
+    <line x1="409.4" y1="827.8" x2="413.7" y2="814.4" stroke-width="3"/>
+    <line x1="377.0" y1="815.3" x2="382.7" y2="802.5" stroke-width="3"/>
+    <line x1="346.0" y1="799.5" x2="359.0" y2="777.0" stroke-width="6"/>
+    <line x1="316.9" y1="780.6" x2="325.1" y2="769.3" stroke-width="3"/>
+    <line x1="289.8" y1="758.7" x2="299.2" y2="748.3" stroke-width="3"/>
+    <line x1="265.3" y1="734.2" x2="275.7" y2="724.8" stroke-width="3"/>
+    <line x1="243.4" y1="707.1" x2="254.7" y2="698.9" stroke-width="3"/>
+    <line x1="224.5" y1="678.0" x2="247.0" y2="665.0" stroke-width="6"/>
+    <line x1="208.7" y1="647.0" x2="221.5" y2="641.3" stroke-width="3"/>
+    <line x1="196.2" y1="614.6" x2="209.6" y2="610.3" stroke-width="3"/>
+    <line x1="187.3" y1="581.0" x2="200.9" y2="578.1" stroke-width="3"/>
+    <line x1="181.8" y1="546.7" x2="195.7" y2="545.2" stroke-width="3"/>
+    <line x1="180.0" y1="512.0" x2="206.0" y2="512.0" stroke-width="6"/>
+    <line x1="181.8" y1="477.3" x2="195.7" y2="478.8" stroke-width="3"/>
+    <line x1="187.3" y1="443.0" x2="200.9" y2="445.9" stroke-width="3"/>
+    <line x1="196.2" y1="409.4" x2="209.6" y2="413.7" stroke-width="3"/>
+    <line x1="208.7" y1="377.0" x2="221.5" y2="382.7" stroke-width="3"/>
+    <line x1="224.5" y1="346.0" x2="247.0" y2="359.0" stroke-width="6"/>
+    <line x1="243.4" y1="316.9" x2="254.7" y2="325.1" stroke-width="3"/>
+    <line x1="265.3" y1="289.8" x2="275.7" y2="299.2" stroke-width="3"/>
+    <line x1="289.8" y1="265.3" x2="299.2" y2="275.7" stroke-width="3"/>
+    <line x1="316.9" y1="243.4" x2="325.1" y2="254.7" stroke-width="3"/>
+    <line x1="346.0" y1="224.5" x2="359.0" y2="247.0" stroke-width="6"/>
+    <line x1="377.0" y1="208.7" x2="382.7" y2="221.5" stroke-width="3"/>
+    <line x1="409.4" y1="196.2" x2="413.7" y2="209.6" stroke-width="3"/>
+    <line x1="443.0" y1="187.3" x2="445.9" y2="200.9" stroke-width="3"/>
+    <line x1="477.3" y1="181.8" x2="478.8" y2="195.7" stroke-width="3"/>
+  </g>
+
+  <!-- Inner engraved ring -->
+  <circle cx="512" cy="512" r="232" fill="none" stroke="#2A2D30" stroke-width="4"/>
+  <circle cx="512" cy="512" r="226" fill="none" stroke="#9CA1A6" stroke-opacity="0.4" stroke-width="2"/>
+
+  <!-- Central turned-metal hub -->
+  <circle cx="512" cy="512" r="150" fill="url(#hub)"/>
+  <circle cx="512" cy="512" r="150" fill="none" stroke="#000000" stroke-opacity="0.45" stroke-width="3"/>
+  <circle cx="512" cy="512" r="150" fill="none" stroke="#B7BBC0" stroke-opacity="0.35" stroke-width="1.5"/>
+
+  <!-- Top sheen overlay for turned-metal feel -->
+  <circle cx="512" cy="512" r="300" fill="url(#sheen)"/>
+
+  <!-- Accent indicator marker at 12 o'clock: an arrow/notch that reads as 'a' -->
+  <!-- Triangular pointer aimed inward toward the top tick -->
+  <path d="M 512 168
+           L 540 226
+           Q 512 214 484 226 Z"
+        fill="url(#accent)"/>
+  <!-- Glow seat under marker -->
+  <circle cx="512" cy="222" r="16" fill="#F59E0B" fill-opacity="0.25"/>
+  <!-- Subtle rounded 'a'-evoking dot on the marker -->
+  <circle cx="512" cy="205" r="9" fill="#FFFFFF" fill-opacity="0.55"/>
+
+  <!-- Hub center pivot with accent tie-in (small dial knob) -->
+  <circle cx="512" cy="512" r="20" fill="#3A3D40"/>
+  <circle cx="512" cy="512" r="20" fill="none" stroke="#000000" stroke-opacity="0.5" stroke-width="2"/>
+  <circle cx="506" cy="506" r="6" fill="#FFFFFF" fill-opacity="0.35"/>
+</svg>

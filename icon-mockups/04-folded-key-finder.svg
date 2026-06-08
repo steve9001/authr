@@ -1,0 +1,82 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#27272A"/>
+      <stop offset="1" stop-color="#18181B"/>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0.55" y2="1">
+      <stop offset="0" stop-color="#FBBF24"/>
+      <stop offset="0.55" stop-color="#F59E0B"/>
+      <stop offset="1" stop-color="#B45309"/>
+    </linearGradient>
+    <linearGradient id="sheen" x1="0" y1="0" x2="0.5" y2="1">
+      <stop offset="0" stop-color="#FEF3C7" stop-opacity="0.9"/>
+      <stop offset="0.4" stop-color="#FEF3C7" stop-opacity="0.0"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Squircle background (Big Sur superellipse, corner r ~229) -->
+  <path fill="url(#bg)" d="
+    M512,32
+    C 736,32 824,32 902,90
+    C 980,148 992,236 992,512
+    C 992,788 980,876 902,934
+    C 824,992 736,992 512,992
+    C 288,992 200,992 122,934
+    C 44,876 32,788 32,512
+    C 32,236 44,148 122,90
+    C 200,32 288,32 512,32 Z"/>
+
+  <!-- The 'a' / key ligature as one continuous gold mark.
+       Double-story lowercase 'a': round bowl on the left + straight stem
+       on the right. The bowl doubles as the round BOW of a key (a ring with
+       a keyhole), and the stem descends past the baseline into the key BLADE
+       with teeth. Scaled and recentred to occupy ~60% of the canvas. -->
+  <g transform="translate(512,512) scale(1.5) translate(-470,-546)">
+    <!--
+      Outer + inner profile of the 'a', filled as one even-odd path:
+        outer: bowl arc (left) joined to the stem (right), the stem
+               continuing down into a toothed blade.
+        inner: the bowl counter (the 'a' aperture) carved out.
+      Geometry: bowl center (440,470) outer r=150, stem right edge x=618,
+      stem left edge x=562. Baseline ~y=620; blade descends to y=742.
+    -->
+    <path fill="url(#gold)" fill-rule="evenodd" d="
+      M590,372
+      C 606,372 618,384 618,400
+      L 618,604
+      L 654,604 L 654,642 L 618,642
+      L 618,672 L 646,672 L 646,708 L 618,708
+      L 618,716
+      C 618,732 606,744 590,744
+      C 574,744 562,732 562,716
+      L 562,548
+      C 530,612 466,640 408,624
+      C 332,604 286,532 300,456
+      C 313,386 379,338 450,348
+      C 510,356 558,404 562,466
+      L 562,400
+      C 562,384 574,372 590,372 Z
+      M448,420
+      C 408,414 369,442 363,482
+      C 357,522 384,560 424,566
+      C 464,572 503,545 509,505
+      C 515,465 488,426 448,420 Z"/>
+
+    <!-- Keyhole detail inside the bowl counter: reinforces the KEY read
+         while leaving the open 'a' aperture visible at lower-right. -->
+    <g fill="url(#gold)">
+      <circle cx="436" cy="468" r="22"/>
+      <path d="M424,482 L448,482 L456,532 L416,532 Z"/>
+    </g>
+
+    <!-- Sheen highlight along the upper-left of the bowl and the stem top -->
+    <path fill="url(#sheen)" opacity="0.55" d="
+      M450,348 C 379,338 313,386 300,456 C 296,476 297,495 303,513
+      C 305,453 350,406 410,400 C 437,397 463,405 484,420
+      C 472,378 463,350 450,348 Z"/>
+    <path fill="url(#sheen)" opacity="0.5" d="
+      M590,372 C 606,372 618,384 618,400 L618,470 L562,470 L562,400
+      C 562,384 574,372 590,372 Z"/>
+  </g>
+</svg>

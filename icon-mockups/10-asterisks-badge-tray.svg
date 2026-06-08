@@ -1,0 +1,20 @@
+<svg width="42" height="30" viewBox="0 0 42 30" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    authr menu-bar template icon — "***" badge (wide outline, open interior).
+    Same box and border as 07b/08/09. The label is three asterisks (password-mask
+    motif). Asterisks sit high in the line, so the baseline is pushed down
+    (y=30.15 for font-size 28: center = 15 + ~0.54*size) to vertically center the
+    ink at y=15. Pure black + alpha (macOS template) -> white frame + white "***".
+  -->
+  <mask id="frameS">
+    <rect x="0" y="0" width="42" height="30" fill="#000"/>
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" fill="#fff"/>
+    <rect x="4.15" y="4.15" width="33.7" height="21.7" rx="5.3" fill="#000"/>
+  </mask>
+  <g fill="#000000">
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" mask="url(#frameS)"/>
+    <text x="21" y="30.15" text-anchor="middle"
+          font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+          font-weight="700" font-size="28" letter-spacing="-1.5">***</text>
+  </g>
+</svg>

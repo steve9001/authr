@@ -1,0 +1,21 @@
+<svg width="42" height="30" viewBox="0 0 42 30" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    authr menu-bar template icon — "2FA badge" (wide outline, open interior).
+    Pure black + alpha (macOS template). On a dark menu bar this renders as a
+    WHITE rounded-rect border + WHITE "2FA", with the bar showing through the
+    interior (translucent background). The wider aspect gives the 3 glyphs room
+    so they stay crisp at menu-bar size.
+  -->
+  <mask id="frameB">
+    <rect x="0" y="0" width="42" height="30" fill="#000"/>
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" fill="#fff"/>
+    <rect x="4.15" y="4.15" width="33.7" height="21.7" rx="5.3" fill="#000"/>
+  </mask>
+  <g fill="#000000">
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" mask="url(#frameB)"/>
+    <text x="21" y="15.4" text-anchor="middle"
+          font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+          font-weight="800" font-size="15" letter-spacing="-0.3"
+          dominant-baseline="central">2FA</text>
+  </g>
+</svg>

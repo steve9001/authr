@@ -1,0 +1,20 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    authr menu-bar template icon — "2FA badge" (solid).
+    Pure black, transparent bg, fill+alpha only (macOS inverts automatically).
+    A solid rounded square with "2FA" knocked OUT via a mask, so the text reads
+    as the tile's negative space. Heavy condensed weight keeps 3 glyphs legible
+    down to 16px.
+  -->
+  <mask id="cut2fa">
+    <rect x="0" y="0" width="32" height="32" fill="#000"/>
+    <!-- visible tile -->
+    <rect x="2.5" y="2.5" width="27" height="27" rx="7" fill="#fff"/>
+    <!-- knocked-out label -->
+    <text x="16" y="16.6" fill="#000" text-anchor="middle"
+          font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+          font-weight="800" font-size="12.5" letter-spacing="-0.6"
+          dominant-baseline="central">2FA</text>
+  </mask>
+  <rect x="2.5" y="2.5" width="27" height="27" rx="7" fill="#000000" mask="url(#cut2fa)"/>
+</svg>

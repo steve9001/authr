@@ -1,0 +1,26 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Monochrome macOS template: pure black, fill + alpha only, transparent bg -->
+  <!-- Same shield outline ring + pulse/checkmark glyph (unlocked / authenticated) -->
+  <path fill="#000000" fill-rule="evenodd"
+    d="M16 2
+       C 16 2 22.5 5 27 5.8
+       C 27.7 5.9 28 6.4 28 7
+       L 28 16.5
+       C 28 23 23.4 27.4 16 30
+       C 8.6 27.4 4 23 4 16.5
+       L 4 7
+       C 4 6.4 4.3 5.9 5 5.8
+       C 9.5 5 16 2 16 2 Z
+       M 16 4.6
+       C 13.7 5.6 10.4 7 6.8 7.8
+       L 6.8 16.5
+       C 6.8 21.6 10.3 25.2 16 27.4
+       C 21.7 25.2 25.2 21.6 25.2 16.5
+       L 25.2 7.8
+       C 21.6 7 18.3 5.6 16 4.6 Z"/>
+
+  <!-- Pulse / EKG line that also reads as a checkmark on the rising stroke -->
+  <polyline points="8,16 11,16 12.8,12.5 15,20 18.5,9.5 21.5,17.5 24,16"
+    fill="none" stroke="#000000" stroke-width="2.4"
+    stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

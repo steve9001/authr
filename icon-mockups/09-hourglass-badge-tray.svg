@@ -1,0 +1,23 @@
+<svg width="42" height="30" viewBox="0 0 42 30" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    authr menu-bar template icon — hourglass badge (wide outline frame).
+    Same box and border as 07b/08. The glyph is a solid hourglass: overhanging
+    end-cap bars at top and bottom (which TOUCH the inner top/bottom borders)
+    and two tapering glass chambers meeting at a slim neck. Pure black + alpha
+    (macOS template) -> white frame + white hourglass on a dark bar.
+  -->
+  <mask id="frameH">
+    <rect x="0" y="0" width="42" height="30" fill="#000"/>
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" fill="#fff"/>
+    <rect x="4.15" y="4.15" width="33.7" height="21.7" rx="5.3" fill="#000"/>
+  </mask>
+  <g fill="#000000">
+    <!-- border ring -->
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" mask="url(#frameH)"/>
+    <!-- end caps: touch inner top (y=4.15) and bottom (y=25.85) borders -->
+    <rect x="13" y="4.15" width="16" height="2.4" rx="0.6"/>
+    <rect x="13" y="23.45" width="16" height="2.4" rx="0.6"/>
+    <!-- glass chambers: top base -> neck -> bottom base -->
+    <path d="M 16 6.55 L 26 6.55 L 21.8 15 L 26 23.45 L 16 23.45 L 20.2 15 Z"/>
+  </g>
+</svg>

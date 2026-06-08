@@ -1,0 +1,19 @@
+<svg width="42" height="30" viewBox="0 0 42 30" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    authr menu-bar template icon — single "A" badge (wide outline, open interior).
+    Derived from 07b: same box and border, but the label is a single heavy
+    uppercase "A" sized to nearly fill the interior height. Pure black + alpha
+    (macOS template) -> white border + white "A" on a dark bar, see-through center.
+  -->
+  <mask id="frameA">
+    <rect x="0" y="0" width="42" height="30" fill="#000"/>
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" fill="#fff"/>
+    <rect x="4.15" y="4.15" width="33.7" height="21.7" rx="5.3" fill="#000"/>
+  </mask>
+  <g fill="#000000">
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" mask="url(#frameA)"/>
+    <text x="21" y="24.65" text-anchor="middle"
+          font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+          font-weight="800" font-size="27">A</text>
+  </g>
+</svg>

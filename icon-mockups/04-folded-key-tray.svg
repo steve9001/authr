@@ -1,0 +1,27 @@
+<svg width="32" height="32" viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">
+  <!-- Monochrome template: the 'a'/key ligature simplified for 16-32px.
+       Round bow (with a punched hole) doubles as the bowl of a lowercase 'a';
+       the right stem descends into a short toothed key blade.
+       Single solid black mark, even-odd so the bow counter stays open. -->
+  <path fill="#000000" fill-rule="evenodd" d="
+    M21.5,5.5
+    C 22.6,5.5 23.5,6.4 23.5,7.5
+    L 23.5,20
+    L 26,20 L 26,22.5 L 23.5,22.5
+    L 23.5,24 L 25.5,24 L 25.5,26.5 L 23.5,26.5
+    L 23.5,27
+    C 23.5,28.1 22.6,29 21.5,29
+    C 20.4,29 19.5,28.1 19.5,27
+    L 19.5,19.4
+    C 17.6,21.7 14.4,22.6 11.6,21.5
+    C 8.1,20.1 6.4,16.1 7.8,12.6
+    C 9.2,9.1 13.2,7.4 16.7,8.8
+    C 18.2,9.4 19.4,10.6 19.5,12.2
+    L 19.5,7.5
+    C 19.5,6.4 20.4,5.5 21.5,5.5 Z
+    M13.5,11.6
+    C 11.0,11.6 9.0,13.6 9.0,16.1
+    C 9.0,18.6 11.0,20.6 13.5,20.6
+    C 16.0,20.6 18.0,18.6 18.0,16.1
+    C 18.0,13.6 16.0,11.6 13.5,11.6 Z"/>
+</svg>

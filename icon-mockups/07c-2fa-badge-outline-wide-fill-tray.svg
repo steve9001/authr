@@ -1,0 +1,24 @@
+<svg width="42" height="30" viewBox="0 0 42 30" xmlns="http://www.w3.org/2000/svg">
+  <!--
+    authr menu-bar template icon — "2FA badge" (wide outline, faint tile).
+    Same as 07b but the interior carries a low-alpha (~18%) fill, so the badge
+    reads as a soft frosted chip rather than a hollow outline. Still pure
+    black + alpha: on a dark bar the body becomes a faint translucent-white
+    panel behind the WHITE border + WHITE "2FA".
+  -->
+  <mask id="frameC">
+    <rect x="0" y="0" width="42" height="30" fill="#000"/>
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" fill="#fff"/>
+    <rect x="4.15" y="4.15" width="33.7" height="21.7" rx="5.3" fill="#000"/>
+  </mask>
+  <!-- faint interior body -->
+  <rect x="4.15" y="4.15" width="33.7" height="21.7" rx="5.3" fill="#000000" opacity="0.18"/>
+  <g fill="#000000">
+    <!-- border ring -->
+    <rect x="1.75" y="1.75" width="38.5" height="26.5" rx="7.5" mask="url(#frameC)"/>
+    <text x="21" y="15.4" text-anchor="middle"
+          font-family="Helvetica Neue, Helvetica, Arial, sans-serif"
+          font-weight="800" font-size="15" letter-spacing="-0.3"
+          dominant-baseline="central">2FA</text>
+  </g>
+</svg>

@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32" fill="none">
+  <!-- Monochrome template glyph: concentric dial + indicator marker -->
+  <g fill="#000000">
+    <!-- Outer ring (annulus via even-odd) -->
+    <path fill-rule="evenodd" clip-rule="evenodd"
+          d="M16 3 C23.18 3 29 8.82 29 16 C29 23.18 23.18 29 16 29 C8.82 29 3 23.18 3 16 C3 8.82 8.82 3 16 3 Z
+             M16 6 C10.477 6 6 10.477 6 16 C6 21.523 10.477 26 16 26 C21.523 26 26 21.523 26 16 C26 10.477 21.523 6 16 6 Z"/>
+
+    <!-- Inner hub -->
+    <circle cx="16" cy="16" r="4.5"/>
+
+    <!-- Four cardinal tick marks -->
+    <rect x="15" y="7.5" width="2" height="2.5" rx="1"/>
+    <rect x="15" y="22" width="2" height="2.5" rx="1"/>
+    <rect x="7.5" y="15" width="2.5" height="2" rx="1"/>
+    <rect x="22" y="15" width="2.5" height="2" rx="1"/>
+
+    <!-- Indicator marker at top: arrow/notch evoking 'a' -->
+    <path d="M16 0.5 L19 5 C18 4.4 14 4.4 13 5 Z"/>
+  </g>
+</svg>

@@ -1,0 +1,103 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <!-- Squircle background gradient: deep slate/navy -->
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0F172A"/>
+      <stop offset="1" stop-color="#1E293B"/>
+    </linearGradient>
+
+    <!-- Metallic shield face gradient -->
+    <linearGradient id="shieldFace" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#3B4A63"/>
+      <stop offset="0.5" stop-color="#293547"/>
+      <stop offset="1"   stop-color="#1B2433"/>
+    </linearGradient>
+
+    <!-- Beveled rim gradient (lighter, metallic edge) -->
+    <linearGradient id="shieldRim" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"   stop-color="#6B7B96"/>
+      <stop offset="0.5" stop-color="#46546B"/>
+      <stop offset="1"   stop-color="#2A3445"/>
+    </linearGradient>
+
+    <!-- Teal/green pulse gradient -->
+    <linearGradient id="pulse" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#2DD4BF"/>
+      <stop offset="1" stop-color="#34D399"/>
+    </linearGradient>
+
+    <!-- Top sheen highlight on shield -->
+    <linearGradient id="sheen" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0"    stop-color="#FFFFFF" stop-opacity="0.22"/>
+      <stop offset="0.45" stop-color="#FFFFFF" stop-opacity="0"/>
+    </linearGradient>
+
+    <!-- Glow filter for the pulse line -->
+    <filter id="glow" x="-40%" y="-60%" width="180%" height="220%">
+      <feGaussianBlur stdDeviation="9" result="b"/>
+      <feMerge>
+        <feMergeNode in="b"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+
+    <!-- Soft drop shadow under shield -->
+    <filter id="shieldShadow" x="-30%" y="-30%" width="160%" height="160%">
+      <feDropShadow dx="0" dy="18" stdDeviation="26" flood-color="#000000" flood-opacity="0.45"/>
+    </filter>
+  </defs>
+
+  <!-- macOS squircle background (corner radius ~229) -->
+  <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229" fill="url(#bg)"/>
+
+  <!-- Subtle top vignette to add depth -->
+  <rect x="0" y="0" width="1024" height="1024" rx="229" ry="229" fill="url(#sheen)"/>
+
+  <!-- SHIELD: occupies central ~62% (~635px wide), centered with macOS-like padding.
+       Shield bounds roughly x:[245..779], y:[210..814] -->
+  <g filter="url(#shieldShadow)">
+    <!-- Rim / outer shield -->
+    <path fill="url(#shieldRim)"
+      d="M512 200
+         C 512 200 660 268 760 286
+         C 776 289 786 303 786 320
+         L 786 520
+         C 786 660 700 760 512 826
+         C 324 760 238 660 238 520
+         L 238 320
+         C 238 303 248 289 264 286
+         C 364 268 512 200 512 200 Z"/>
+    <!-- Inner face (beveled inset) -->
+    <path fill="url(#shieldFace)"
+      d="M512 240
+         C 512 240 652 304 748 321
+         C 757 322 762 330 762 339
+         L 762 516
+         C 762 642 686 732 512 794
+         C 338 732 262 642 262 516
+         L 262 339
+         C 262 330 267 322 276 321
+         C 372 304 512 240 512 240 Z"/>
+    <!-- Top sheen overlay clipped to inner face -->
+    <path fill="url(#sheen)"
+      d="M512 240
+         C 512 240 652 304 748 321
+         C 757 322 762 330 762 339
+         L 762 516
+         C 762 642 686 732 512 794
+         C 338 732 262 642 262 516
+         L 262 339
+         C 262 330 267 322 276 321
+         C 372 304 512 240 512 240 Z"/>
+  </g>
+
+  <!-- PULSE / EKG line (also reads as a subtle checkmark on the right downstroke).
+       Flat lead-in, spike up, deep dip, big rise (check), flat lead-out. -->
+  <g filter="url(#glow)" fill="none" stroke="url(#pulse)"
+     stroke-width="30" stroke-linecap="round" stroke-linejoin="round">
+    <polyline points="300,512 372,512 408,452 452,612 512,388 596,560 652,512 724,512"/>
+  </g>
+
+  <!-- Tiny glow dot at the end of the pulse for a 'live signal' feel -->
+  <circle cx="724" cy="512" r="13" fill="#34D399" filter="url(#glow)"/>
+</svg>
