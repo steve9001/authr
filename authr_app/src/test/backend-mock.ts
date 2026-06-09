@@ -7,8 +7,19 @@ import { vi } from "vitest";
 // a secret-free `AccountView` ({ name }) projection out of `list_accounts`.
 export type AccountView = { name: string };
 export type ImportSummary = { added: number; skipped: number; relabeled: number };
+// E1 codes-list projection (UNIFIED_PLAN E1). `get_codes` returns the live OTP per account
+// plus the shared period boundary; secrets never cross the bridge (only the rendered code does).
+export type CodeView = {
+  name: string;
+  code: string;
+  period_seconds: number;
+  valid_until_unix: number;
+};
 
 let accounts: AccountView[] = [];
+// Codes are driven independently of `accounts` so a test can pin exact code strings and a
+// known countdown boundary without going through add/secret machinery.
+let codes: CodeView[] = [];
 
 // Backup/import seam (UNIFIED_PLAN §5). Tier 1 mocks the backend, so we don't move real
 // bytes through a file — we record the last export args for assertions and drive import via
@@ -29,6 +40,7 @@ let unlocked = true;
 /** Reset the backing store; call in `beforeEach`. Also resets encryption to disabled. */
 export function setAccounts(initial: AccountView[]): void {
   accounts = initial.map((a) => ({ ...a }));
+  codes = [];
   vaultPassword = null;
   unlocked = true;
   lastExport = null;
@@ -62,6 +74,11 @@ export function getAccounts(): AccountView[] {
   return accounts;
 }
 
+/** Drive the E1 codes view: what `get_codes` returns (name, live code, countdown boundary). */
+export function setCodes(c: CodeView[]): void {
+  codes = c.map((x) => ({ ...x }));
+}
+
 /**
  * Drive the encryption seam for a test. `password: null` (default) leaves the store
  * plaintext; a string encrypts it, and `locked` controls whether this session holds the
@@ -84,6 +101,13 @@ export const invoke = vi.fn(
     switch (cmd) {
       case "list_accounts":
         return accounts.map((a) => ({ ...a }));
+
+      // E1 codes list. `resize_main` is the content-sizing call fired from `fitWindow`; it's
+      // pure window chrome with nothing to assert here, so it's a no-op like `set_dialog_open`.
+      case "get_codes":
+        return codes.map((c) => ({ ...c }));
+      case "resize_main":
+        return null;
 
       case "add_account": {
         const name = args?.name as string;
@@ -179,10 +203,13 @@ export const invoke = vi.fn(
   },
 );
 
-// `@tauri-apps/api/window` — only `getCurrentWindow().hide()` is used (Escape).
+// `@tauri-apps/api/window` — E1 uses `getCurrentWindow().hide()` (Escape) and
+// `.onFocusChanged()` (re-check the lock gate + refresh when the popover reopens). The latter
+// returns a promise resolving to an unlisten fn, mirroring Tauri's listener contract.
 export const hide = vi.fn();
+export const onFocusChanged = vi.fn(() => Promise.resolve(() => {}));
 export function getCurrentWindow() {
-  return { hide };
+  return { hide, onFocusChanged };
 }
 
 // `@tauri-apps/plugin-clipboard-manager` — only E1 (the codes view) uses it; the
