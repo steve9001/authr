@@ -30,6 +30,23 @@ pub fn sort_accounts(accounts: &mut [Account]) {
     accounts.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 }
 
+/// Index of the account named `name`, if any. The single place the name-comparison policy
+/// (currently case-sensitive, exact match) lives — every name lookup routes through here or
+/// [`contains_name`], so changing the policy is a one-line edit.
+fn position_by_name(accounts: &[Account], name: &str) -> Option<usize> {
+    accounts.iter().position(|a| a.name == name)
+}
+
+/// Whether any account is named `name`. See [`position_by_name`] for the comparison policy.
+fn contains_name(accounts: &[Account], name: &str) -> bool {
+    position_by_name(accounts, name).is_some()
+}
+
+/// Whether any account already holds `secret` — identity for the additive import merge.
+fn contains_secret(accounts: &[Account], secret: &str) -> bool {
+    accounts.iter().any(|a| a.secret == secret)
+}
+
 /// Add a validated, name-unique account to `accounts`, returning the created account.
 ///
 /// Validates the secret by generating a code and rejects a name that already exists —
@@ -45,7 +62,7 @@ pub fn add_account(
     let secret: String = secret.chars().filter(|c| !c.is_whitespace()).collect();
     let account = Account::new(name.clone(), secret);
     validate_secret(&account.secret)?;
-    if accounts.iter().any(|a| a.name == name) {
+    if contains_name(accounts, &name) {
         return Err(AccountError::Duplicate(name));
     }
     accounts.push(account.clone());
@@ -63,15 +80,10 @@ pub fn rename_account(
     name: &str,
     new_name: String,
 ) -> Result<(), AccountError> {
-    let idx = accounts
-        .iter()
-        .position(|a| a.name == name)
+    let idx = position_by_name(accounts, name)
         .ok_or_else(|| AccountError::NotFound(name.to_string()))?;
-    if accounts
-        .iter()
-        .enumerate()
-        .any(|(i, a)| i != idx && a.name == new_name)
-    {
+    // Names are unique, so any match other than the account being renamed is a real collision.
+    if matches!(position_by_name(accounts, &new_name), Some(other) if other != idx) {
         return Err(AccountError::Duplicate(new_name));
     }
     accounts[idx].name = new_name;
@@ -83,9 +95,7 @@ pub fn rename_account(
 ///
 /// Permanent and irreversible — no secret is returned to the caller.
 pub fn delete_account(accounts: &mut Vec<Account>, name: &str) -> Result<(), AccountError> {
-    let idx = accounts
-        .iter()
-        .position(|a| a.name == name)
+    let idx = position_by_name(accounts, name)
         .ok_or_else(|| AccountError::NotFound(name.to_string()))?;
     accounts.remove(idx);
     Ok(())
@@ -108,12 +118,12 @@ pub struct ImportSummary {
 /// never collides with an existing name — keeping the store's name-uniqueness invariant.
 fn deduplicated_label(base: &str, existing: &[Account]) -> String {
     let first = format!("{base} (imported)");
-    if !existing.iter().any(|a| a.name == first) {
+    if !contains_name(existing, &first) {
         return first;
     }
     (2..)
         .map(|n| format!("{base} (imported {n})"))
-        .find(|candidate| !existing.iter().any(|a| &a.name == candidate))
+        .find(|candidate| !contains_name(existing, candidate))
         .expect("an unbounded counter always finds a free label")
 }
 
@@ -133,9 +143,9 @@ fn deduplicated_label(base: &str, existing: &[Account]) -> String {
 pub fn merge_accounts(existing: &mut Vec<Account>, imported: Vec<Account>) -> ImportSummary {
     let mut summary = ImportSummary::default();
     for incoming in imported {
-        if existing.iter().any(|a| a.secret == incoming.secret) {
+        if contains_secret(existing, &incoming.secret) {
             summary.skipped += 1;
-        } else if existing.iter().any(|a| a.name == incoming.name) {
+        } else if contains_name(existing, &incoming.name) {
             let name = deduplicated_label(&incoming.name, existing);
             existing.push(Account { name, ..incoming });
             summary.relabeled += 1;
