@@ -73,15 +73,13 @@ pub fn is_encrypted_data(bytes: &[u8]) -> bool {
 /// any at-rest passphrase. Reuses the same `age` scrypt+AEAD path as the live vault so the
 /// `.authr` file round-trips back through [`decrypt_accounts`]. No hand-rolled crypto.
 pub fn encrypt_accounts(password: &str, accounts: &[Account]) -> Result<Vec<u8>, VaultError> {
-    let plaintext = serde_json::to_vec(accounts)?;
-    encrypt_bytes(&SecretString::from(password.to_owned()), &plaintext)
+    seal_accounts(&SecretString::from(password.to_owned()), accounts)
 }
 
 /// Open an encrypted backup produced by [`encrypt_accounts`]. A wrong password yields
 /// [`VaultError::WrongPassphrase`] (surfaced to the import UI as "Incorrect password").
 pub fn decrypt_accounts(password: &str, ciphertext: &[u8]) -> Result<Vec<Account>, VaultError> {
-    let plaintext = decrypt_bytes(&SecretString::from(password.to_owned()), ciphertext)?;
-    Ok(serde_json::from_slice(&plaintext)?)
+    open_accounts(&SecretString::from(password.to_owned()), ciphertext)
 }
 
 #[derive(Error, Debug)]
@@ -132,6 +130,21 @@ fn decrypt_bytes(passphrase: &SecretString, ciphertext: &[u8]) -> Result<Vec<u8>
         .read_to_end(&mut out)
         .map_err(|e| VaultError::Decrypt(e.to_string()))?;
     Ok(out)
+}
+
+/// Serialize `accounts` and seal them under `passphrase`. The single source of truth for the
+/// on-disk encoding shared by the live vault ([`Session::write_encrypted`]) and `.authr`
+/// backups ([`encrypt_accounts`]).
+fn seal_accounts(passphrase: &SecretString, accounts: &[Account]) -> Result<Vec<u8>, VaultError> {
+    let plaintext = serde_json::to_vec(accounts)?;
+    encrypt_bytes(passphrase, &plaintext)
+}
+
+/// Open `bytes` with `passphrase` and deserialize the accounts. Inverse of [`seal_accounts`];
+/// shared by [`Session::load_accounts`] and [`decrypt_accounts`].
+fn open_accounts(passphrase: &SecretString, bytes: &[u8]) -> Result<Vec<Account>, VaultError> {
+    let plaintext = decrypt_bytes(passphrase, bytes)?;
+    Ok(serde_json::from_slice(&plaintext)?)
 }
 
 /// An unlocked, in-memory session over an encrypted store. Holds the
@@ -211,15 +224,12 @@ impl Session {
 
     fn load_accounts(&self) -> Result<Vec<Account>, VaultError> {
         let ciphertext = fs::read(self.vault_path())?;
-        let plaintext = decrypt_bytes(&self.passphrase, &ciphertext)?;
-        let accounts = serde_json::from_slice(&plaintext)?;
-        Ok(accounts)
+        open_accounts(&self.passphrase, &ciphertext)
     }
 
     fn write_encrypted(&self, accounts: &[Account]) -> Result<(), VaultError> {
         fs::create_dir_all(self.storage.dir())?;
-        let plaintext = serde_json::to_vec(accounts)?;
-        let ciphertext = encrypt_bytes(&self.passphrase, &plaintext)?;
+        let ciphertext = seal_accounts(&self.passphrase, accounts)?;
         fs::write(self.vault_path(), ciphertext)?;
         Ok(())
     }
