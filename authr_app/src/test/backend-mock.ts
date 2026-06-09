@@ -4,8 +4,8 @@ import { vi } from "vitest";
 // Mirrors `authr_app/src-tauri/src/lib.rs` closely enough to exercise the UI:
 // duplicate-name + invalid-secret rejection (thrown as a string, like the real
 // `map_err(|e| e.to_string())`), name mutation on rename, removal on delete, and
-// a secret-free `AccountView` ({ name, issuer }) projection out of `list_accounts`.
-export type AccountView = { name: string; issuer: string | null };
+// a secret-free `AccountView` ({ name }) projection out of `list_accounts`.
+export type AccountView = { name: string };
 export type ImportSummary = { added: number; skipped: number; relabeled: number };
 
 let accounts: AccountView[] = [];
@@ -94,7 +94,7 @@ export const invoke = vi.fn(
         if (!isValidSecret(secret)) {
           throw `Invalid secret: not valid base32`;
         }
-        const view: AccountView = { name, issuer: null };
+        const view: AccountView = { name };
         accounts.push(view);
         return { ...view };
       }

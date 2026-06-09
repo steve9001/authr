@@ -62,7 +62,6 @@ pub fn generate_code_view(account: &Account) -> Result<CodeView, TotpError> {
     let (code, valid_until_unix) = generate_with_validity(account)?;
     Ok(CodeView {
         name: account.name.clone(),
-        issuer: account.issuer.clone(),
         code,
         period_seconds: PERIOD_SECONDS,
         valid_until_unix,

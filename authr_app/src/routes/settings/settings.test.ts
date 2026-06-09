@@ -22,8 +22,8 @@ function callCount(cmd: string): number {
 
 beforeEach(() => {
   setAccounts([
-    { name: "alice", issuer: null },
-    { name: "bob", issuer: null },
+    { name: "alice" },
+    { name: "bob" },
   ]);
 });
 

@@ -5,7 +5,7 @@
   import { downloadDir, homeDir } from "@tauri-apps/api/path";
   import { goto } from "$app/navigation";
 
-  type AccountView = { name: string; issuer: string | null };
+  type AccountView = { name: string };
   type ImportSummary = { added: number; skipped: number; relabeled: number };
 
   let accounts = $state<AccountView[]>([]);

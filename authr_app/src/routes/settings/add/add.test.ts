@@ -48,7 +48,7 @@ describe("Add account page (§9.1 scenarios 1–4, 10)", () => {
 
   // Scenario 2: duplicate name → inline .error, no navigation.
   it("renders an inline error and does not navigate on a duplicate name", async () => {
-    setAccounts([{ name: "GitHub", issuer: null }]);
+    setAccounts([{ name: "GitHub" }]);
     render(AddPage);
     await typeInto(screen.getByLabelText("Account name"), "GitHub");
     await typeInto(screen.getByLabelText("Secret key"), "JBSWY3DPEHPK3PXP");

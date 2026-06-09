@@ -32,7 +32,7 @@ import {
 import BackupPage from "./+page.svelte";
 
 beforeEach(() => {
-  setAccounts([{ name: "alice", issuer: null }]);
+  setAccounts([{ name: "alice" }]);
 });
 
 async function typeInto(el: Element, value: string) {

@@ -86,7 +86,7 @@ fn held_passphrase(vault: &State<VaultSession>) -> Result<Option<SecretString>, 
 // (UNIFIED_PLAN §9.2). Each `#[tauri::command]` resolves the OS config dir + the session
 // passphrase and delegates here.
 
-/// E1's account list: name (+issuer) only, no codes, no secrets.
+/// E1's account list: name only, no codes, no secrets.
 fn list_accounts_impl(store: &dyn AccountStore) -> Result<Vec<AccountView>, String> {
     let accounts = store.load().map_err(|e| e.to_string())?;
     Ok(accounts.iter().map(AccountView::from).collect())
@@ -234,7 +234,7 @@ fn import_backup_impl(
     Ok(summary)
 }
 
-/// E1's account list: name (+issuer) only, no codes, no secrets.
+/// E1's account list: name only, no codes, no secrets.
 #[tauri::command]
 fn list_accounts(
     app: tauri::AppHandle,
@@ -541,7 +541,6 @@ mod tests {
             add_account_impl(&store, "alice".to_string(), "JBSW Y3DP EHPK 3PXP".to_string())
                 .unwrap();
         assert_eq!(view.name, "alice");
-        assert_eq!(view.issuer, None);
 
         let reloaded = store.load().unwrap();
         assert_eq!(reloaded.len(), 1);

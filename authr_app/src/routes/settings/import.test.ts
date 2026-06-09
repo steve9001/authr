@@ -25,7 +25,7 @@ import { invoke, open, setAccounts, setImport } from "../../test/backend-mock";
 import SettingsPage from "./+page.svelte";
 
 beforeEach(() => {
-  setAccounts([{ name: "alice", issuer: null }]);
+  setAccounts([{ name: "alice" }]);
 });
 
 describe("Import accounts (D11)", () => {

@@ -7,7 +7,6 @@
 
   type CodeView = {
     name: string;
-    issuer: string | null;
     code: string;
     period_seconds: number;
     valid_until_unix: number;
@@ -75,15 +74,11 @@
     fitWindow();
   });
 
-  // Substring filter on name (+issuer), case-insensitive — immediate, no debounce.
+  // Substring filter on name, case-insensitive — immediate, no debounce.
   const filtered = $derived.by(() => {
     const q = filter.trim().toLowerCase();
     if (!q) return codes;
-    return codes.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.issuer ?? "").toLowerCase().includes(q),
-    );
+    return codes.filter((c) => c.name.toLowerCase().includes(q));
   });
 
   // Single global countdown — every code shares the same 30s boundary, so the first
