@@ -1,16 +1,15 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
   import { open } from "@tauri-apps/plugin-dialog";
-  import { downloadDir, homeDir } from "@tauri-apps/api/path";
   import { goto } from "$app/navigation";
   import Modal from "$lib/Modal.svelte";
   import { onEscape } from "$lib/keys";
+  import { backupBaseDir, withDialogGuard } from "$lib/dialog";
   import {
     listAccounts,
     encryptionStatus,
     renameAccount,
     deleteAccount,
-    setDialogOpen,
     importBackup,
     type AccountView,
     type ImportSummary,
@@ -116,26 +115,17 @@
   async function startImport() {
     // Anchor the picker at Downloads (where an exported backup is most likely to be),
     // falling back to the home dir. No filename — it's a file picker, not a save.
-    let defaultPath: string;
-    try {
-      defaultPath = await downloadDir();
-    } catch {
-      defaultPath = await homeDir();
-    }
+    const defaultPath = await backupBaseDir();
 
-    // Suspend the popover's focus-loss auto-hide while the native open sheet is in front,
-    // then resume it — otherwise the popover hides and tears the sheet down with it.
-    let picked: string | string[] | null;
-    await setDialogOpen(true);
-    try {
-      picked = await open({
+    // The guard suspends the popover's focus-loss auto-hide while the native open sheet is
+    // in front, then resumes it (otherwise the popover hides and tears the sheet down).
+    const picked = await withDialogGuard(() =>
+      open({
         multiple: false,
         defaultPath,
         filters: [{ name: "Authr backup", extensions: ["authr", "json"] }],
-      });
-    } finally {
-      await setDialogOpen(false);
-    }
+      }),
+    );
     if (typeof picked !== "string") return; // cancelled
     await attemptImport(picked, null);
   }
@@ -378,18 +368,7 @@
   .srow-btn:hover {
     background: var(--hover);
   }
-  .state-tag {
-    font-size: 10px;
-    color: var(--text-dim);
-    background: var(--control);
-    padding: 3px 8px;
-    border-radius: 10px;
-    white-space: nowrap;
-  }
-  .state-tag.on {
-    color: var(--ok);
-    background: var(--ok-bg);
-  }
+  /* The On/Off state chip is a shared primitive in app.css (.state-tag / .state-tag.on). */
   .srow-text {
     display: flex;
     flex-direction: column;

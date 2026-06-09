@@ -1,10 +1,11 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { save } from "@tauri-apps/plugin-dialog";
-  import { downloadDir, homeDir, join } from "@tauri-apps/api/path";
+  import { join } from "@tauri-apps/api/path";
   import { goto } from "$app/navigation";
   import { onEscape } from "$lib/keys";
-  import { setDialogOpen, exportBackup } from "$lib/backend";
+  import { backupBaseDir, withDialogGuard } from "$lib/dialog";
+  import { exportBackup } from "$lib/backend";
 
   // E6 (UNIFIED_PLAN §5, D6): the backup gets its OWN password, independent of the live
   // store. A non-empty password ⇒ the .authr is encrypted with it; left blank ⇒ plaintext
@@ -35,36 +36,29 @@
     }
     // Anchor the picker at Downloads (the conventional "a file I just exported" spot, one
     // click from Finder's sidebar) with the filename prefilled, so the user clearly sees
-    // where it starts. Fall back to the home dir if Downloads can't be resolved.
+    // where it starts. backupBaseDir() falls back to the home dir if Downloads can't resolve.
     let defaultPath: string;
     try {
-      let baseDir: string;
-      try {
-        baseDir = await downloadDir();
-      } catch {
-        baseDir = await homeDir();
-      }
-      defaultPath = await join(baseDir, FILE_NAME);
+      defaultPath = await join(await backupBaseDir(), FILE_NAME);
     } catch (e) {
       error = String(e);
       return;
     }
 
-    // Pick a destination via the dialog plugin (user-selected path only). Suspend the
-    // popover's focus-loss auto-hide while the native sheet is in front, then resume it —
-    // otherwise the popover hides on focus loss and tears the sheet down with it.
+    // Pick a destination via the dialog plugin (user-selected path only). The guard suspends
+    // the popover's focus-loss auto-hide while the native sheet is in front, then resumes it
+    // (otherwise the popover hides on focus loss and tears the sheet down with it).
     let dest: string | null;
-    await setDialogOpen(true);
     try {
-      dest = await save({
-        defaultPath,
-        filters: [{ name: "Authr backup", extensions: ["authr"] }],
-      });
+      dest = await withDialogGuard(() =>
+        save({
+          defaultPath,
+          filters: [{ name: "Authr backup", extensions: ["authr"] }],
+        }),
+      );
     } catch (e) {
       error = String(e);
       return;
-    } finally {
-      await setDialogOpen(false);
     }
     if (!dest) return; // cancelled the save dialog
 
@@ -155,8 +149,8 @@
 </main>
 
 <style>
-  /* Shell, header, fields + buttons come from app.css; the file card, the encrypted/plain
-     state chip, the explanation, and the plaintext opt-in are unique to E6. */
+  /* Shell, header, fields + buttons, and the state chip come from app.css; the file card,
+     the explanation, and the plaintext opt-in are unique to E6. */
   main {
     display: flex;
     flex-direction: column;
@@ -189,18 +183,7 @@
     font-size: 11px;
     color: var(--text-dim);
   }
-  .state-tag {
-    font-size: 10px;
-    color: var(--text-dim);
-    background: var(--control);
-    padding: 3px 8px;
-    border-radius: 10px;
-    white-space: nowrap;
-  }
-  .state-tag.on {
-    color: var(--ok);
-    background: var(--ok-bg);
-  }
+  /* The Encrypted/Plain state chip is a shared primitive in app.css (.state-tag / .state-tag.on). */
 
   .explain {
     font-size: 12px;

@@ -80,6 +80,27 @@ fn held_passphrase(vault: &State<VaultSession>) -> Result<Option<SecretString>, 
     Ok(vault.0.lock().map_err(|e| e.to_string())?.clone())
 }
 
+/// Set the session passphrase in the managed lock — `Some` after a successful
+/// unlock/set/change (D7), `None` to clear it on disable. The poison-handling here is the one
+/// place the lock is written, so the `held_passphrase`/`hold_passphrase` pair owns it together.
+fn hold_passphrase(
+    vault: &State<VaultSession>,
+    passphrase: Option<SecretString>,
+) -> Result<(), String> {
+    *vault.0.lock().map_err(|e| e.to_string())? = passphrase;
+    Ok(())
+}
+
+/// Resolve the session-aware [`AccountStore`] for a read/mutate command: the OS config dir's
+/// store opened against the held passphrase (encrypted [`Session`] for a vault, plaintext
+/// [`Storage`] otherwise). The single seam every command wrapper delegates through.
+fn held_store(
+    app: &tauri::AppHandle,
+    vault: &State<VaultSession>,
+) -> Result<Box<dyn AccountStore>, String> {
+    account_store(storage_for(app)?, held_passphrase(vault)?)
+}
+
 // Each command's testable core: a plain helper over the `AccountStore` seam (the plaintext
 // `Storage` or the encrypted `Session`), with no `AppHandle` and no Tauri runtime, so Tier 2
 // can drive the real load → mutate → save round-trip against a tempfile store
@@ -234,28 +255,28 @@ fn import_backup_impl(
     Ok(summary)
 }
 
-/// E1's account list: name only, no codes, no secrets.
+/// E1's account list — command wrapper: resolves the session store, delegates to
+/// [`list_accounts_impl`] (canonical doc there).
 #[tauri::command]
 fn list_accounts(
     app: tauri::AppHandle,
     vault: State<VaultSession>,
 ) -> Result<Vec<AccountView>, String> {
-    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    let store = held_store(&app, &vault)?;
     list_accounts_impl(&*store)
 }
 
-/// E1's live codes: each account projected to a `CodeView` (code + period boundary), the only
-/// account-derived values that reach the webview. Computed in Rust (UNIFIED_PLAN §6).
+/// E1's live codes — command wrapper: resolves the session store, delegates to
+/// [`get_codes_impl`] (canonical doc there). The `CodeView`s are the only account-derived
+/// values that reach the webview.
 #[tauri::command]
 fn get_codes(app: tauri::AppHandle, vault: State<VaultSession>) -> Result<Vec<CodeView>, String> {
-    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    let store = held_store(&app, &vault)?;
     get_codes_impl(&*store)
 }
 
-/// E5 add: validate the secret + reject a duplicate name in `authr_core`, persist, and return
-/// the created account projected to an `AccountView` (no secret crosses the bridge, D4). The
-/// secret's whitespace is stripped in core ("spaces ignored"). On an encrypted store the save
-/// re-encrypts with the in-memory passphrase (D7).
+/// E5 add account — command wrapper: resolves the session store, delegates to
+/// [`add_account_impl`] (canonical doc there).
 #[tauri::command]
 fn add_account(
     app: tauri::AppHandle,
@@ -263,11 +284,12 @@ fn add_account(
     name: String,
     secret: String,
 ) -> Result<AccountView, String> {
-    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    let store = held_store(&app, &vault)?;
     add_account_impl(&*store, name, secret)
 }
 
-/// Inline rename from an E3 manage row. Rejects a name collision / missing account in core.
+/// Inline rename from an E3 manage row — command wrapper: resolves the session store,
+/// delegates to [`rename_account_impl`] (canonical doc there).
 #[tauri::command]
 fn rename_account(
     app: tauri::AppHandle,
@@ -275,18 +297,19 @@ fn rename_account(
     name: String,
     new_name: String,
 ) -> Result<(), String> {
-    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    let store = held_store(&app, &vault)?;
     rename_account_impl(&*store, name, new_name)
 }
 
-/// Permanent delete from the E3 delete-confirm modal. No secret is returned (D4).
+/// Permanent delete from the E3 delete-confirm modal — command wrapper: resolves the session
+/// store, delegates to [`delete_account_impl`] (canonical doc there).
 #[tauri::command]
 fn delete_account(
     app: tauri::AppHandle,
     vault: State<VaultSession>,
     name: String,
 ) -> Result<(), String> {
-    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    let store = held_store(&app, &vault)?;
     delete_account_impl(&*store, name)
 }
 
@@ -311,8 +334,7 @@ fn set_password(
     new: String,
 ) -> Result<(), String> {
     let passphrase = set_password_impl(&storage_for(&app)?, &new)?;
-    *vault.0.lock().map_err(|e| e.to_string())? = Some(passphrase);
-    Ok(())
+    hold_passphrase(&vault, Some(passphrase))
 }
 
 /// E4 change-password: verify the current passphrase, re-seal under the new one, hold the new.
@@ -324,8 +346,7 @@ fn change_password(
     new: String,
 ) -> Result<(), String> {
     let passphrase = change_password_impl(&storage_for(&app)?, &old, &new)?;
-    *vault.0.lock().map_err(|e| e.to_string())? = Some(passphrase);
-    Ok(())
+    hold_passphrase(&vault, Some(passphrase))
 }
 
 /// Unlock the store for the session (D7) — verify the passphrase, then hold it. The `/unlock`
@@ -337,8 +358,7 @@ fn unlock(
     password: String,
 ) -> Result<(), String> {
     let passphrase = unlock_impl(&storage_for(&app)?, &password)?;
-    *vault.0.lock().map_err(|e| e.to_string())? = Some(passphrase);
-    Ok(())
+    hold_passphrase(&vault, Some(passphrase))
 }
 
 /// Remove the password: decrypt the vault back to plaintext `accounts.json`, then drop the
@@ -347,14 +367,12 @@ fn unlock(
 #[tauri::command]
 fn disable_password(app: tauri::AppHandle, vault: State<VaultSession>) -> Result<(), String> {
     disable_password_impl(&storage_for(&app)?, held_passphrase(&vault)?)?;
-    *vault.0.lock().map_err(|e| e.to_string())? = None;
-    Ok(())
+    hold_passphrase(&vault, None)
 }
 
-/// E6 export: write the live accounts to a user-picked `.authr` path. `Some(pw)` encrypts the
-/// backup with its **own** password (D6); `None` writes plaintext JSON (the UI gates this
-/// behind an explicit confirmation). Reads through the session-aware store, so the live vault
-/// must be unlocked to export (D7).
+/// E6 export to a user-picked `.authr` path — command wrapper: resolves the session store
+/// (so the live vault must be unlocked to export), delegates to [`export_backup_impl`]
+/// (canonical doc there).
 #[tauri::command]
 fn export_backup(
     app: tauri::AppHandle,
@@ -362,14 +380,12 @@ fn export_backup(
     dest_path: String,
     password: Option<String>,
 ) -> Result<(), String> {
-    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    let store = held_store(&app, &vault)?;
     export_backup_impl(&*store, &dest_path, password)
 }
 
-/// Import row: additive one-tap merge from a user-picked `.authr` file, keyed on the secret
-/// (D11). `Some(pw)` decrypts an encrypted backup. Returns `{ added, skipped, relabeled }` for
-/// the toast — no secret crosses the bridge (D4). On an unlocked encrypted store the merged
-/// result is re-encrypted on save via the in-memory passphrase (D7).
+/// E6 import row: additive one-tap merge from a user-picked `.authr` — command wrapper:
+/// resolves the session store, delegates to [`import_backup_impl`] (canonical doc there).
 #[tauri::command]
 fn import_backup(
     app: tauri::AppHandle,
@@ -377,7 +393,7 @@ fn import_backup(
     src_path: String,
     password: Option<String>,
 ) -> Result<ImportSummary, String> {
-    let store = account_store(storage_for(&app)?, held_passphrase(&vault)?)?;
+    let store = held_store(&app, &vault)?;
     import_backup_impl(&*store, &src_path, password)
 }
 

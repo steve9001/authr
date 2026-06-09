@@ -122,6 +122,21 @@ h1 {
   margin: 14px 2px 5px;
 }
 
+/* State chip — the small status pill on the right of a row/card. The `.on` variant turns it
+   green for the affirmative state. Shared by E3's Encryption On/Off and E6's Encrypted/Plain. */
+.state-tag {
+  font-size: 10px;
+  color: var(--text-dim);
+  background: var(--control);
+  padding: 3px 8px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+.state-tag.on {
+  color: var(--ok);
+  background: var(--ok-bg);
+}
+
 /* Form fields, shared by E4/E5/E6. */
 .field-label {
   display: block;

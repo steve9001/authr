@@ -104,15 +104,21 @@
     }
   }
 
+  // Re-check the lock gate, then (if not diverted to /unlock) reload codes, refocus the
+  // filter, and re-fit the window. Shared by the initial mount and every popover reopen so
+  // the two paths can't drift apart.
+  async function reopen() {
+    const diverted = await gateIfLocked();
+    if (!diverted) {
+      await refresh();
+      searchEl?.focus();
+      fitWindow();
+    }
+  }
+
   onMount(() => {
     // Gate on the lock state first; only load codes if the store is open.
-    gateIfLocked().then(async (diverted) => {
-      if (!diverted) {
-        await refresh();
-        searchEl?.focus();
-        fitWindow();
-      }
-    });
+    reopen();
 
     // Drive the bar and re-fetch on the real period rollover (not a client-side guess).
     const tick = setInterval(() => {
@@ -126,15 +132,7 @@
     // gate too, in case the session ended while hidden.
     const win = getCurrentWindow();
     const unlisten = win.onFocusChanged(({ payload: focused }) => {
-      if (focused) {
-        gateIfLocked().then(async (diverted) => {
-          if (!diverted) {
-            await refresh();
-            searchEl?.focus();
-            fitWindow();
-          }
-        });
-      }
+      if (focused) reopen();
     });
 
     const offEscape = onEscape(() => win.hide());
