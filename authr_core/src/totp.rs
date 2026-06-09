@@ -37,10 +37,11 @@ fn now_unix() -> Result<u64, TotpError> {
         .map_err(|e| TotpError::Generation(e.to_string()))
 }
 
+/// The current code, dropping the validity boundary. A thin wrapper over
+/// [`generate_with_validity`] so the crate has a single clock-reading code-generation path —
+/// the seam to thread an injectable clock through, should that ever be needed.
 pub fn generate_code(account: &Account) -> Result<String, TotpError> {
-    let totp = totp_for(account)?;
-    totp.generate_current()
-        .map_err(|e| TotpError::Generation(e.to_string()))
+    generate_with_validity(account).map(|(code, _)| code)
 }
 
 /// Generate the current code along with the unix timestamp at which it expires (the
