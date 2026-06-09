@@ -25,16 +25,19 @@ pub fn validate_secret(secret: &str) -> Result<(), AccountError> {
 
 /// Sort accounts alphabetically by name, case-insensitively, in place. Applied whenever the
 /// store grows (or a name changes) so the persisted JSON — and the popover list — stay
-/// alphabetized. Stable, so two names that differ only by case keep their relative order.
+/// alphabetized. Folds case the same way [`position_by_name`] does, so ordering and name
+/// identity agree: names differing only by case are equal here and rejected as duplicates.
 pub fn sort_accounts(accounts: &mut [Account]) {
     accounts.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
 }
 
-/// Index of the account named `name`, if any. The single place the name-comparison policy
-/// (currently case-sensitive, exact match) lives — every name lookup routes through here or
-/// [`contains_name`], so changing the policy is a one-line edit.
+/// Index of the account named `name`, if any. Names are **case-insensitively unique**: this
+/// folds case with `to_lowercase` exactly as [`sort_accounts`] does, so ordering and identity
+/// agree. The single place the name-comparison policy lives — every name lookup routes through
+/// here or [`contains_name`], so changing the policy is a one-line edit.
 fn position_by_name(accounts: &[Account], name: &str) -> Option<usize> {
-    accounts.iter().position(|a| a.name == name)
+    let needle = name.to_lowercase();
+    accounts.iter().position(|a| a.name.to_lowercase() == needle)
 }
 
 /// Whether any account is named `name`. See [`position_by_name`] for the comparison policy.
@@ -218,6 +221,17 @@ mod tests {
         assert_eq!(accounts.len(), 1);
     }
 
+    // Names are case-insensitively unique: a case-variant of an existing name is a duplicate.
+    #[test]
+    fn add_account_rejects_case_variant_duplicate_name() {
+        let mut accounts = Vec::new();
+        add_account(&mut accounts, "GitHub".to_string(), "JBSWY3DPEHPK3PXP".to_string()).unwrap();
+        let err = add_account(&mut accounts, "github".to_string(), "GEZDGNBVGY3TQOJQ".to_string())
+            .unwrap_err();
+        assert_eq!(err, AccountError::Duplicate("github".to_string()));
+        assert_eq!(accounts.len(), 1);
+    }
+
     #[test]
     fn add_account_rejects_invalid_secret() {
         let mut accounts = Vec::new();
@@ -258,6 +272,25 @@ mod tests {
         add_account(&mut accounts, "alice".to_string(), "JBSWY3DPEHPK3PXP".to_string()).unwrap();
         rename_account(&mut accounts, "alice", "alice".to_string()).unwrap();
         assert_eq!(accounts[0].name, "alice");
+    }
+
+    // Re-casing your own account is allowed: the only name match is the account being renamed.
+    #[test]
+    fn rename_account_can_change_only_case() {
+        let mut accounts = Vec::new();
+        add_account(&mut accounts, "github".to_string(), "JBSWY3DPEHPK3PXP".to_string()).unwrap();
+        rename_account(&mut accounts, "github", "GitHub".to_string()).unwrap();
+        assert_eq!(accounts[0].name, "GitHub");
+    }
+
+    // Renaming onto a case-variant of a *different* account is a collision.
+    #[test]
+    fn rename_account_rejects_case_variant_collision() {
+        let mut accounts = Vec::new();
+        add_account(&mut accounts, "alice".to_string(), "JBSWY3DPEHPK3PXP".to_string()).unwrap();
+        add_account(&mut accounts, "bob".to_string(), "GEZDGNBVGY3TQOJQ".to_string()).unwrap();
+        let err = rename_account(&mut accounts, "bob", "ALICE".to_string()).unwrap_err();
+        assert_eq!(err, AccountError::Duplicate("ALICE".to_string()));
     }
 
     #[test]
@@ -349,6 +382,17 @@ mod tests {
         assert_eq!(existing[0].secret, SECRET_A, "original untouched");
         assert_eq!(existing[1].name, "work (imported)");
         assert_eq!(existing[1].secret, SECRET_B);
+    }
+
+    // A case-variant name collision (different secret) relabels, same as an exact collision.
+    #[test]
+    fn merge_relabels_case_variant_name_collision() {
+        let mut existing = vec![acct("GitHub", SECRET_A)];
+        let summary = merge_accounts(&mut existing, vec![acct("github", SECRET_B)]);
+        assert_eq!(summary, ImportSummary { added: 0, skipped: 0, relabeled: 1 });
+        assert_eq!(existing.len(), 2);
+        assert!(existing.iter().any(|a| a.name == "GitHub" && a.secret == SECRET_A));
+        assert!(existing.iter().any(|a| a.name == "github (imported)" && a.secret == SECRET_B));
     }
 
     // A repeated relabel collision falls through to a numbered label.
