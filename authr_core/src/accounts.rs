@@ -40,8 +40,8 @@ pub fn add_account(
     name: String,
     secret: String,
 ) -> Result<Account, AccountError> {
-    // Spaces (and any whitespace) in a pasted secret are ignored — the E5 hint promises
-    // "spaces ignored", and base32 carries no whitespace, so this is safe to strip.
+    // Spaces (and any whitespace) in a pasted secret are ignored — the add-account UI hint
+    // promises "spaces ignored", and base32 carries no whitespace, so this is safe to strip.
     let secret: String = secret.chars().filter(|c| !c.is_whitespace()).collect();
     let account = Account::new(name.clone(), secret);
     validate_secret(&account.secret)?;
@@ -81,7 +81,7 @@ pub fn rename_account(
 
 /// Remove the account named `name`. Errors with [`AccountError::NotFound`] if absent.
 ///
-/// Permanent and irreversible — no secret is returned to the caller (UNIFIED_PLAN D4).
+/// Permanent and irreversible — no secret is returned to the caller.
 pub fn delete_account(accounts: &mut Vec<Account>, name: &str) -> Result<(), AccountError> {
     let idx = accounts
         .iter()
@@ -91,9 +91,9 @@ pub fn delete_account(accounts: &mut Vec<Account>, name: &str) -> Result<(), Acc
     Ok(())
 }
 
-/// Counts reported back from an additive import merge (UNIFIED_PLAN D11), shown in the
+/// Counts reported back from an additive import merge, shown in the
 /// one-tap result toast. Serializable because it is the `import_backup` command's return
-/// value — but it carries only counts, never a secret (D4).
+/// value — but it carries only counts, never a secret.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
 pub struct ImportSummary {
     /// New accounts added as-is (secret absent locally, name free).
@@ -117,7 +117,7 @@ fn deduplicated_label(base: &str, existing: &[Account]) -> String {
         .expect("an unbounded counter always finds a free label")
 }
 
-/// Additive, idempotent, rename-safe merge of `imported` into `existing` (UNIFIED_PLAN D11).
+/// Additive, idempotent, rename-safe merge of `imported` into `existing`.
 ///
 /// Identity is the **immutable base32 secret**, not the editable name, so the merge is
 /// rename-safe and idempotent. Per-account rules:
@@ -126,10 +126,10 @@ fn deduplicated_label(base: &str, existing: &[Account]) -> String {
 ///   * secret absent + name collides with a *different* secret → **add under a
 ///     de-duplicated label** (`Name (imported)`).
 ///
-/// Never deletes and never overwrites — this is additive union, not delete-aware sync (D11).
+/// Never deletes and never overwrites — this is additive union, not delete-aware sync.
 /// The caller persists `existing` afterward (re-encrypting via the session passphrase if the
-/// live store is an unlocked vault, D7). Runs entirely in core, so no secret crosses the
-/// bridge (D4).
+/// live store is an unlocked vault). Runs entirely in core, so no secret crosses the
+/// bridge.
 pub fn merge_accounts(existing: &mut Vec<Account>, imported: Vec<Account>) -> ImportSummary {
     let mut summary = ImportSummary::default();
     for incoming in imported {
@@ -284,7 +284,7 @@ mod tests {
         assert_eq!(err, AccountError::NotFound("ghost".to_string()));
     }
 
-    // --- merge_accounts (D11) ---------------------------------------------------------------
+    // --- merge_accounts ---------------------------------------------------------------------
 
     // A distinct base32 secret per account so identity-on-secret is exercised.
     const SECRET_A: &str = "JBSWY3DPEHPK3PXP";

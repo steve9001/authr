@@ -14,8 +14,8 @@ pub enum StorageError {
     Io(#[from] std::io::Error),
     #[error("Serialization error: {0}")]
     Serialization(#[from] serde_json::Error),
-    /// A crypto-layer failure surfaced through the `AccountStore` seam (UNIFIED_PLAN §3.2
-    /// item 4). The encrypted backend ([`crate::vault::Session`]) maps `age`/decrypt errors
+    /// A crypto-layer failure surfaced through the `AccountStore` seam. The encrypted
+    /// backend ([`crate::vault::Session`]) maps `age`/decrypt errors
     /// into this so `load`/`save` keep the same `StorageError` return as the plaintext store —
     /// the trait and every command call site stay unchanged. The variant carries a string
     /// rather than a `VaultError` to avoid `storage` depending on the crypto module.
@@ -26,12 +26,12 @@ pub enum StorageError {
 /// Plaintext account store rooted at an explicit directory.
 ///
 /// The directory is *injected* rather than discovered, which is the clean seam the rest
-/// of the plan builds on (UNIFIED_PLAN §3.2 item 1):
+/// of the system builds on:
 ///   * the Tauri app passes `app_config_dir()`,
 ///   * tests pass a `tempfile::TempDir`,
 ///   * [`Storage::default_location`] keeps the old directories-based path for back-compat.
 ///
-/// Phase 4's encrypted vault becomes a second backend behind the same access shape — see
+/// The encrypted vault is a second backend behind the same access shape — see
 /// [`crate::vault`].
 pub struct Storage {
     dir: PathBuf,

@@ -17,9 +17,8 @@ impl Account {
     }
 }
 
-/// Account data safe to cross the Rust ⇄ webview bridge for E1's list — name (+issuer)
-/// only. The base32 `secret` is deliberately absent (UNIFIED_PLAN D4: secrets never
-/// cross the bridge).
+/// Account data safe to cross the Rust ⇄ webview bridge for the account list — name (+issuer)
+/// only. The base32 `secret` is deliberately absent: secrets never cross the bridge.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct AccountView {
     pub name: String,
@@ -36,7 +35,7 @@ impl From<&Account> for AccountView {
 }
 
 /// A generated code plus the period boundary that drives the UI's single global
-/// countdown bar. Like [`AccountView`], it carries no secret (D4); the 6-digit `code`
+/// countdown bar. Like [`AccountView`], it carries no secret; the 6-digit `code`
 /// is the only account-derived value that reaches the webview.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub struct CodeView {

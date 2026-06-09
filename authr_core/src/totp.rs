@@ -56,7 +56,7 @@ pub fn generate_with_validity(account: &Account) -> Result<(String, u64), TotpEr
 }
 
 /// Project an account into a [`CodeView`] for the bridge — code + period boundary, no
-/// secret (UNIFIED_PLAN D4).
+/// secret.
 pub fn generate_code_view(account: &Account) -> Result<CodeView, TotpError> {
     let (code, valid_until_unix) = generate_with_validity(account)?;
     Ok(CodeView {
@@ -101,7 +101,7 @@ mod tests {
         let view = generate_code_view(&account).unwrap();
         assert_eq!(view.name, "test");
         assert_eq!(view.period_seconds, PERIOD_SECONDS);
-        // CodeView has no `secret` field by construction (D4) — this is a compile-time
+        // CodeView has no `secret` field by construction — this is a compile-time
         // guarantee; the test documents the intent.
     }
 }

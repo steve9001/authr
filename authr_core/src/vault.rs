@@ -1,18 +1,18 @@
-//! Encryption seam (UNIFIED_PLAN §3.2 item 4, D5/D7) — implemented in Phase 4.
+//! Encryption seam for the account store.
 //!
 //! On disk the store is one of:
 //!   * plaintext `accounts.json` — today's format, read/written by [`crate::storage::Storage`],
 //!     kept forever for back-compat, or
 //!   * an `age`-passphrase-encrypted vault `accounts.vault` — the same serialized
 //!     `Vec<Account>` sealed with scrypt (KDF) + ChaCha20-Poly1305 AEAD via
-//!     [`age::Encryptor::with_user_passphrase`] (D5).
+//!     [`age::Encryptor::with_user_passphrase`].
 //!
 //! Callers (the Tauri commands) talk to the [`AccountStore`] trait, **not** a concrete type.
 //! The plaintext [`Storage`] is one implementor; [`Session`] — an unlocked, in-memory
 //! decryption of an encrypted store — is the other. The command call sites (`store.load()` /
 //! `store.save(&accounts)`) do not change between the two; that is the point of the trait.
 //!
-//! ## Re-encrypting on every write without re-prompting (D7)
+//! ## Re-encrypting on every write without re-prompting
 //!
 //! `age` passphrase encryption runs scrypt over `passphrase + a fresh random salt` on every
 //! seal, then AEAD-seals the data; decryption re-derives the key from the embedded salt. So a
@@ -62,14 +62,14 @@ pub fn is_encrypted(dir: &Path) -> bool {
 }
 
 /// Whether `bytes` is an `age`-encrypted payload rather than plaintext JSON. The import flow
-/// (UNIFIED_PLAN §5 Phase 5) uses this to tell an encrypted `.authr` backup from a plaintext
+/// uses this to tell an encrypted `.authr` backup from a plaintext
 /// one so it can prompt for the file's password. `age`'s binary format begins with its
 /// version line `age-encryption.org/v1`.
 pub fn is_encrypted_data(bytes: &[u8]) -> bool {
     bytes.starts_with(b"age-encryption.org")
 }
 
-/// Seal a set of accounts under a **backup's own** password (UNIFIED_PLAN D6) — independent of
+/// Seal a set of accounts under a **backup's own** password — independent of
 /// any at-rest passphrase. Reuses the same `age` scrypt+AEAD path as the live vault so the
 /// `.authr` file round-trips back through [`decrypt_accounts`]. No hand-rolled crypto.
 pub fn encrypt_accounts(password: &str, accounts: &[Account]) -> Result<Vec<u8>, VaultError> {
@@ -134,7 +134,7 @@ fn decrypt_bytes(passphrase: &SecretString, ciphertext: &[u8]) -> Result<Vec<u8>
     Ok(out)
 }
 
-/// An unlocked, in-memory session over an encrypted store (UNIFIED_PLAN D7). Holds the
+/// An unlocked, in-memory session over an encrypted store. Holds the
 /// passphrase as a zeroizing [`SecretString`] for the life of the process alongside its
 /// [`Storage`] (the store directory). Because `age` re-runs scrypt on every seal, writes need
 /// only the passphrase — so [`save`](Session::save) re-encrypts silently with no re-prompt.
@@ -196,7 +196,7 @@ impl Session {
     }
 
     /// Resume an already-unlocked session from a passphrase held in memory — no I/O, no
-    /// verification. The command layer caches the [`SecretString`] across calls (D7) and
+    /// verification. The command layer caches the [`SecretString`] across calls and
     /// rebuilds the session per command with this; the next `load`/`save` does the crypto.
     pub fn resume(storage: Storage, passphrase: SecretString) -> Self {
         Self {
@@ -350,7 +350,7 @@ mod tests {
         assert!(!is_encrypted(dir.path()));
     }
 
-    // Backup helpers (D6): encrypt under the backup's own password and read it back.
+    // Backup helpers: encrypt under the backup's own password and read it back.
     #[test]
     fn encrypt_decrypt_accounts_round_trips() {
         let accounts = vec![acct("alice"), acct("bob")];
@@ -378,7 +378,7 @@ mod tests {
         assert!(!is_encrypted_data(&json));
     }
 
-    // The ciphertext on disk never contains the plaintext secret (D6/at-rest guarantee).
+    // The ciphertext on disk never contains the plaintext secret (at-rest guarantee).
     #[test]
     fn vault_file_does_not_leak_the_secret() {
         let dir = TempDir::new().unwrap();

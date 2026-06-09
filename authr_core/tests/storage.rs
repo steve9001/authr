@@ -2,7 +2,7 @@
 //!
 //! These are the old `authr_cli/tests/integration.rs` cases (list-empty / add+list /
 //! remove / show), ported off the deleted CLI binary to drive the library directly via
-//! `Storage::new(tempdir)` (UNIFIED_PLAN Phase 1, item 4).
+//! `Storage::new(tempdir)`.
 
 use authr_core::accounts::add_account;
 use authr_core::model::Account;
@@ -79,7 +79,7 @@ fn separate_dirs_are_isolated() {
     assert!(b.load().unwrap().is_empty());
 }
 
-// the persistence seam (AccountStore) is what Phase 4 swaps; confirm Storage satisfies it
+// the persistence seam (AccountStore) is the swap point for the encrypted backend; confirm Storage satisfies it
 #[test]
 fn storage_is_usable_through_the_account_store_seam() {
     let (_dir, storage) = store();
