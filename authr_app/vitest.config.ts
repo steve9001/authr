@@ -20,6 +20,9 @@ export default defineConfig({
         "./src/test/app-navigation-stub.ts",
         import.meta.url,
       ).pathname,
+      // `$lib` is a SvelteKit-provided alias; without the kit plugin here we map it
+      // ourselves so shared components (e.g. $lib/Modal.svelte) resolve under jsdom.
+      $lib: new URL("./src/lib", import.meta.url).pathname,
     },
   },
   test: {

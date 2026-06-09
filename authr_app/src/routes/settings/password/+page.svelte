@@ -1,7 +1,14 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { goto } from "$app/navigation";
+  import Modal from "$lib/Modal.svelte";
+  import { onEscape } from "$lib/keys";
+  import {
+    encryptionStatus,
+    changePassword,
+    setPassword,
+    disablePassword,
+  } from "$lib/backend";
 
   // Set vs. change mode is decided by the store's current state (UNIFIED_PLAN §3.4 E4).
   // `enabled` true ⇒ a password already protects the store, so we ask for the current one.
@@ -31,9 +38,7 @@
 
   async function load() {
     try {
-      const s = await invoke<{ enabled: boolean; locked: boolean }>(
-        "encryption_status",
-      );
+      const s = await encryptionStatus();
       enabled = s.enabled;
     } catch (e) {
       console.error("encryption_status failed", e);
@@ -53,9 +58,9 @@
     error = null;
     try {
       if (enabled) {
-        await invoke("change_password", { old: current, new: next });
+        await changePassword(current, next);
       } else {
-        await invoke("set_password", { new: next });
+        await setPassword(next);
       }
       goto("/settings");
     } catch (e) {
@@ -69,7 +74,7 @@
     removeBusy = true;
     removeError = null;
     try {
-      await invoke("disable_password");
+      await disablePassword();
       goto("/settings");
     } catch (e) {
       removeError = String(e);
@@ -79,14 +84,10 @@
 
   onMount(() => {
     load();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (removing) removing = false;
-        else goto("/settings");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return onEscape(() => {
+      if (removing) removing = false;
+      else goto("/settings");
+    });
   });
 </script>
 
@@ -173,33 +174,25 @@
 
 {#if removing}
   <!-- Confirm modal — removing encryption leaves accounts unencrypted on disk. -->
-  <div
-    class="overlay"
-    role="presentation"
-    onclick={(e) => {
-      if (e.target === e.currentTarget) removing = false;
-    }}
-  >
-    <div class="modal" role="dialog" aria-modal="true">
-      <div class="warn">⚠</div>
-      <p class="modal-title">Remove password?</p>
-      <p class="modal-body">
-        Your accounts will be saved <strong>unencrypted</strong> on this device.
-        Anyone with access to this computer can read them.
-      </p>
-      {#if removeError}
-        <p class="modal-error">{removeError}</p>
-      {/if}
-      <div class="modal-actions">
-        <button class="ghost" disabled={removeBusy} onclick={() => (removing = false)}>
-          Cancel
-        </button>
-        <button class="danger-btn" disabled={removeBusy} onclick={removePassword}>
-          Remove
-        </button>
-      </div>
-    </div>
-  </div>
+  <Modal onclose={() => (removing = false)}>
+    <div class="warn">⚠</div>
+    <p class="modal-title">Remove password?</p>
+    <p class="modal-body">
+      Your accounts will be saved <strong>unencrypted</strong> on this device.
+      Anyone with access to this computer can read them.
+    </p>
+    {#if removeError}
+      <p class="modal-error">{removeError}</p>
+    {/if}
+    {#snippet actions()}
+      <button class="ghost" disabled={removeBusy} onclick={() => (removing = false)}>
+        Cancel
+      </button>
+      <button class="danger-btn" disabled={removeBusy} onclick={removePassword}>
+        Remove
+      </button>
+    {/snippet}
+  </Modal>
 {/if}
 
 <style>
@@ -266,77 +259,5 @@
     background: var(--danger);
     color: #fff;
   }
-
-  /* Confirm modal — mirrors the settings page's overlay/modal pattern. */
-  .overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--scrim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 18px;
-  }
-  .modal {
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    padding: 16px 16px 14px;
-    max-width: 300px;
-    text-align: center;
-    box-shadow: var(--shadow-modal);
-  }
-  .warn {
-    font-size: 22px;
-  }
-  .modal-title {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 4px 0 6px;
-  }
-  .modal-body {
-    font-size: 12px;
-    color: var(--text-modal);
-    line-height: 1.45;
-    margin: 0 0 14px;
-  }
-  .modal-body strong {
-    color: var(--text);
-  }
-  .modal-error {
-    color: var(--danger-text);
-    font-size: 11px;
-    margin: 0 0 12px;
-  }
-  .modal-actions {
-    display: flex;
-    gap: 8px;
-  }
-  .ghost,
-  .danger-btn {
-    flex: 1;
-    border: none;
-    border-radius: 7px;
-    font-size: 13px;
-    padding: 9px;
-    cursor: pointer;
-  }
-  .ghost {
-    background: var(--control);
-    color: var(--text-soft);
-  }
-  .ghost:hover {
-    background: var(--control-hover);
-  }
-  .danger-btn {
-    background: var(--danger);
-    color: #fff;
-  }
-  .danger-btn:hover:not(:disabled) {
-    background: var(--danger-hover);
-  }
-  .ghost:disabled,
-  .danger-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
+  /* The remove-confirm modal shell + buttons come from app.css (lib/Modal.svelte). */
 </style>

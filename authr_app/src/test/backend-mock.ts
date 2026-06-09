@@ -5,16 +5,11 @@ import { vi } from "vitest";
 // duplicate-name + invalid-secret rejection (thrown as a string, like the real
 // `map_err(|e| e.to_string())`), name mutation on rename, removal on delete, and
 // a secret-free `AccountView` ({ name }) projection out of `list_accounts`.
-export type AccountView = { name: string };
-export type ImportSummary = { added: number; skipped: number; relabeled: number };
-// E1 codes-list projection (UNIFIED_PLAN E1). `get_codes` returns the live OTP per account
-// plus the shared period boundary; secrets never cross the bridge (only the rendered code does).
-export type CodeView = {
-  name: string;
-  code: string;
-  period_seconds: number;
-  valid_until_unix: number;
-};
+// The bridge payload types are the production contract — re-export them from the single typed
+// boundary (`$lib/backend`) so the mock can't drift from it. Type-only ⇒ erased at runtime, so
+// no import cycle despite `$lib/backend` importing the (mocked) `invoke` from @tauri-apps/api/core.
+export type { AccountView, CodeView, ImportSummary } from "$lib/backend";
+import type { AccountView, CodeView, ImportSummary } from "$lib/backend";
 
 let accounts: AccountView[] = [];
 // Codes are driven independently of `accounts` so a test can pin exact code strings and a

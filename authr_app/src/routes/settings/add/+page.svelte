@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { goto } from "$app/navigation";
+  import { onEscape } from "$lib/keys";
+  import { addAccount } from "$lib/backend";
 
   let name = $state("");
   let secret = $state("");
@@ -17,7 +18,7 @@
     busy = true;
     error = null;
     try {
-      await invoke("add_account", { name: name.trim(), secret });
+      await addAccount(name.trim(), secret);
       goto("/settings");
     } catch (e) {
       // Surfaces duplicate-name / invalid-secret errors from core inline.
@@ -28,11 +29,7 @@
 
   onMount(() => {
     tick().then(() => nameEl?.focus());
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") goto("/settings");
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return onEscape(() => goto("/settings"));
   });
 </script>
 

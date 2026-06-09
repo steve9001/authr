@@ -1,8 +1,9 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { goto } from "$app/navigation";
+  import { onEscape } from "$lib/keys";
+  import { unlock } from "$lib/backend";
 
   // The unlock gate (UNIFIED_PLAN §3.4): shown when the app opens encrypted+locked. A correct
   // passphrase unlocks the session (D7) and routes to the main list; a wrong one stays here.
@@ -18,7 +19,7 @@
     busy = true;
     error = null;
     try {
-      await invoke("unlock", { password });
+      await unlock(password);
       goto("/");
     } catch (e) {
       error = String(e);
@@ -32,11 +33,7 @@
   onMount(() => {
     tick().then(() => inputEl?.focus());
     // Escape just hides the popover (auto-hide parity); reopening still lands on the gate.
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") getCurrentWindow().hide();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return onEscape(() => getCurrentWindow().hide());
   });
 </script>
 

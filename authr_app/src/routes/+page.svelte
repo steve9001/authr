@@ -1,16 +1,15 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { writeText } from "@tauri-apps/plugin-clipboard-manager";
   import { getCurrentWindow } from "@tauri-apps/api/window";
   import { goto } from "$app/navigation";
-
-  type CodeView = {
-    name: string;
-    code: string;
-    period_seconds: number;
-    valid_until_unix: number;
-  };
+  import { onEscape } from "$lib/keys";
+  import {
+    encryptionStatus,
+    getCodes,
+    resizeMain,
+    type CodeView,
+  } from "$lib/backend";
 
   let codes = $state<CodeView[]>([]);
   let filter = $state("");
@@ -25,9 +24,7 @@
   // before touching codes. Returns true when locked (and navigation was kicked off).
   async function gateIfLocked(): Promise<boolean> {
     try {
-      const s = await invoke<{ enabled: boolean; locked: boolean }>(
-        "encryption_status",
-      );
+      const s = await encryptionStatus();
       if (s.enabled && s.locked) {
         locked = true;
         goto("/unlock");
@@ -42,7 +39,7 @@
   async function refresh() {
     if (locked) return;
     try {
-      codes = await invoke<CodeView[]>("get_codes");
+      codes = await getCodes();
     } catch (e) {
       console.error("get_codes failed", e);
       codes = [];
@@ -61,7 +58,7 @@
     const chrome = mainEl.scrollHeight - (listEl?.clientHeight ?? 0);
     const desired = Math.ceil(chrome + (listEl?.scrollHeight ?? 0));
     try {
-      await invoke("resize_main", { height: desired });
+      await resizeMain(desired);
     } catch (e) {
       console.error("resize_main failed", e);
     }
@@ -140,15 +137,12 @@
       }
     });
 
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") win.hide();
-    };
-    window.addEventListener("keydown", onKey);
+    const offEscape = onEscape(() => win.hide());
 
     return () => {
       clearInterval(tick);
       unlisten.then((u) => u());
-      window.removeEventListener("keydown", onKey);
+      offEscape();
       clearTimeout(copyTimer);
     };
   });

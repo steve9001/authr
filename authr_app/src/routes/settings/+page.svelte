@@ -1,12 +1,20 @@
 <script lang="ts">
   import { onMount, tick } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { open } from "@tauri-apps/plugin-dialog";
   import { downloadDir, homeDir } from "@tauri-apps/api/path";
   import { goto } from "$app/navigation";
-
-  type AccountView = { name: string };
-  type ImportSummary = { added: number; skipped: number; relabeled: number };
+  import Modal from "$lib/Modal.svelte";
+  import { onEscape } from "$lib/keys";
+  import {
+    listAccounts,
+    encryptionStatus,
+    renameAccount,
+    deleteAccount,
+    setDialogOpen,
+    importBackup,
+    type AccountView,
+    type ImportSummary,
+  } from "$lib/backend";
 
   let accounts = $state<AccountView[]>([]);
 
@@ -36,15 +44,13 @@
 
   async function refresh() {
     try {
-      accounts = await invoke<AccountView[]>("list_accounts");
+      accounts = await listAccounts();
     } catch (e) {
       console.error("list_accounts failed", e);
       accounts = [];
     }
     try {
-      const s = await invoke<{ enabled: boolean; locked: boolean }>(
-        "encryption_status",
-      );
+      const s = await encryptionStatus();
       encryptionEnabled = s.enabled;
     } catch (e) {
       console.error("encryption_status failed", e);
@@ -72,7 +78,7 @@
       return;
     }
     try {
-      await invoke("rename_account", { name: oldName, newName: next });
+      await renameAccount(oldName, next);
       cancelRename();
       await refresh();
     } catch (e) {
@@ -84,7 +90,7 @@
     if (!pendingDelete) return;
     const name = pendingDelete;
     try {
-      await invoke("delete_account", { name });
+      await deleteAccount(name);
     } catch (e) {
       console.error("delete_account failed", e);
     }
@@ -120,7 +126,7 @@
     // Suspend the popover's focus-loss auto-hide while the native open sheet is in front,
     // then resume it — otherwise the popover hides and tears the sheet down with it.
     let picked: string | string[] | null;
-    await invoke("set_dialog_open", { open: true });
+    await setDialogOpen(true);
     try {
       picked = await open({
         multiple: false,
@@ -128,7 +134,7 @@
         filters: [{ name: "Authr backup", extensions: ["authr", "json"] }],
       });
     } finally {
-      await invoke("set_dialog_open", { open: false });
+      await setDialogOpen(false);
     }
     if (typeof picked !== "string") return; // cancelled
     await attemptImport(picked, null);
@@ -139,10 +145,7 @@
   async function attemptImport(path: string, password: string | null) {
     importBusy = true;
     try {
-      const summary = await invoke<ImportSummary>("import_backup", {
-        srcPath: path,
-        password,
-      });
+      const summary = await importBackup(path, password);
       importPath = null;
       importPw = "";
       importPwError = null;
@@ -182,16 +185,12 @@
 
   onMount(() => {
     refresh();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        if (importPath) cancelImport();
-        else if (pendingDelete) pendingDelete = null;
-        else if (editingName) cancelRename();
-        else goto("/");
-      }
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return onEscape(() => {
+      if (importPath) cancelImport();
+      else if (pendingDelete) pendingDelete = null;
+      else if (editingName) cancelRename();
+      else goto("/");
+    });
   });
 </script>
 
@@ -287,66 +286,50 @@
 
 {#if pendingDelete}
   <!-- Delete-confirm modal — no-recovery warning ONLY; the secret is never shown (D4). -->
-  <div
-    class="overlay"
-    role="presentation"
-    onclick={(e) => {
-      if (e.target === e.currentTarget) pendingDelete = null;
-    }}
-  >
-    <div class="modal" role="dialog" aria-modal="true">
-      <div class="warn">⚠</div>
-      <p class="modal-title">Delete “{pendingDelete}”?</p>
-      <p class="modal-body">
-        Removes it from Authr. There's <strong>no recovery</strong> — you'd need the
-        original secret to add it again.
-      </p>
-      <div class="modal-actions">
-        <button class="ghost" onclick={() => (pendingDelete = null)}>Cancel</button>
-        <button class="danger-btn" onclick={confirmDelete}>🗑 Delete</button>
-      </div>
-    </div>
-  </div>
+  <Modal onclose={() => (pendingDelete = null)}>
+    <div class="warn">⚠</div>
+    <p class="modal-title">Delete “{pendingDelete}”?</p>
+    <p class="modal-body">
+      Removes it from Authr. There's <strong>no recovery</strong> — you'd need the
+      original secret to add it again.
+    </p>
+    {#snippet actions()}
+      <button class="ghost" onclick={() => (pendingDelete = null)}>Cancel</button>
+      <button class="danger-btn" onclick={confirmDelete}>🗑 Delete</button>
+    {/snippet}
+  </Modal>
 {/if}
 
 {#if importPath}
   <!-- Encrypted-import prompt: asks for THAT file's password (independent of the live store). -->
-  <div
-    class="overlay"
-    role="presentation"
-    onclick={(e) => {
-      if (e.target === e.currentTarget) cancelImport();
-    }}
-  >
-    <div class="modal" role="dialog" aria-modal="true">
-      <p class="modal-title">Encrypted backup</p>
-      <p class="modal-body">
-        This backup is protected. Enter <strong>its</strong> password to import.
-      </p>
-      <input
-        bind:this={importPwEl}
-        bind:value={importPw}
-        class="pw-input"
-        type="password"
-        placeholder="Backup password"
-        autocomplete="off"
-        onkeydown={(e) => {
-          if (e.key === "Enter") submitImportPassword();
-        }}
-      />
-      {#if importPwError}
-        <p class="pw-error">{importPwError}</p>
-      {/if}
-      <div class="modal-actions">
-        <button class="ghost" onclick={cancelImport}>Cancel</button>
-        <button
-          class="primary-btn"
-          disabled={!importPw || importBusy}
-          onclick={submitImportPassword}>Import</button
-        >
-      </div>
-    </div>
-  </div>
+  <Modal onclose={cancelImport}>
+    <p class="modal-title">Encrypted backup</p>
+    <p class="modal-body">
+      This backup is protected. Enter <strong>its</strong> password to import.
+    </p>
+    <input
+      bind:this={importPwEl}
+      bind:value={importPw}
+      class="pw-input"
+      type="password"
+      placeholder="Backup password"
+      autocomplete="off"
+      onkeydown={(e) => {
+        if (e.key === "Enter") submitImportPassword();
+      }}
+    />
+    {#if importPwError}
+      <p class="pw-error">{importPwError}</p>
+    {/if}
+    {#snippet actions()}
+      <button class="ghost" onclick={cancelImport}>Cancel</button>
+      <button
+        class="primary-btn"
+        disabled={!importPw || importBusy}
+        onclick={submitImportPassword}>Import</button
+      >
+    {/snippet}
+  </Modal>
 {/if}
 
 {#if toast}
@@ -510,87 +493,8 @@
     background: var(--control-hover);
   }
 
-  /* Delete-confirm modal */
-  .overlay {
-    position: fixed;
-    inset: 0;
-    background: var(--scrim);
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 18px;
-  }
-  .modal {
-    background: var(--surface-raised);
-    border-radius: var(--radius-lg);
-    padding: 16px 16px 14px;
-    max-width: 300px;
-    text-align: center;
-    box-shadow: var(--shadow-modal);
-  }
-  .warn {
-    font-size: 22px;
-  }
-  .modal-title {
-    font-size: 14px;
-    font-weight: 600;
-    margin: 4px 0 6px;
-  }
-  .modal-body {
-    font-size: 12px;
-    color: var(--text-modal);
-    line-height: 1.45;
-    margin: 0 0 14px;
-  }
-  .modal-body strong {
-    color: var(--text);
-  }
-  .modal-actions {
-    display: flex;
-    gap: 8px;
-  }
-  .ghost,
-  .danger-btn {
-    flex: 1;
-    border: none;
-    border-radius: 7px;
-    font-size: 13px;
-    padding: 9px;
-    cursor: pointer;
-  }
-  .ghost {
-    background: var(--control);
-    color: var(--text-soft);
-  }
-  .ghost:hover {
-    background: var(--control-hover);
-  }
-  .danger-btn {
-    background: var(--danger);
-    color: #fff;
-  }
-  .danger-btn:hover {
-    background: var(--danger-hover);
-  }
-  .primary-btn {
-    flex: 1;
-    border: none;
-    border-radius: 7px;
-    font-size: 13px;
-    padding: 9px;
-    cursor: pointer;
-    background: var(--accent);
-    color: #fff;
-  }
-  .primary-btn:hover:not(:disabled) {
-    background: var(--accent-hover);
-  }
-  .primary-btn:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-
-  /* Encrypted-import password prompt */
+  /* Encrypted-import password prompt — the modal shell/buttons live in app.css; only the
+     password field + its inline error are unique to this prompt. */
   .pw-input {
     box-sizing: border-box;
     width: 100%;

@@ -1,9 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { invoke } from "@tauri-apps/api/core";
   import { save } from "@tauri-apps/plugin-dialog";
   import { downloadDir, homeDir, join } from "@tauri-apps/api/path";
   import { goto } from "$app/navigation";
+  import { onEscape } from "$lib/keys";
+  import { setDialogOpen, exportBackup } from "$lib/backend";
 
   // E6 (UNIFIED_PLAN §5, D6): the backup gets its OWN password, independent of the live
   // store. A non-empty password ⇒ the .authr is encrypted with it; left blank ⇒ plaintext
@@ -53,7 +54,7 @@
     // popover's focus-loss auto-hide while the native sheet is in front, then resume it —
     // otherwise the popover hides on focus loss and tears the sheet down with it.
     let dest: string | null;
-    await invoke("set_dialog_open", { open: true });
+    await setDialogOpen(true);
     try {
       dest = await save({
         defaultPath,
@@ -63,7 +64,7 @@
       error = String(e);
       return;
     } finally {
-      await invoke("set_dialog_open", { open: false });
+      await setDialogOpen(false);
     }
     if (!dest) return; // cancelled the save dialog
 
@@ -71,10 +72,7 @@
     error = null;
     try {
       // `Some(pw)` encrypts (D6); `null` writes plaintext JSON after the confirmation above.
-      await invoke("export_backup", {
-        destPath: dest,
-        password: encrypted ? password : null,
-      });
+      await exportBackup(dest, encrypted ? password : null);
       goto("/settings");
     } catch (e) {
       error = String(e);
@@ -84,11 +82,7 @@
 
   onMount(() => {
     pwEl?.focus();
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") goto("/settings");
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
+    return onEscape(() => goto("/settings"));
   });
 </script>
 
